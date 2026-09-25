@@ -4,25 +4,24 @@
     "slug": "mis-finanzas",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/fi-icons/icon.png",
     "scheme": "misfinanzas",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/fi-icons/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F4F1EC",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FDFAF7",
+        "foregroundImage": "./assets/fi-icons/foreground.png",
+        "monochromeImage": "./assets/fi-icons/monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.misfinanzas.app"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/fi-icons/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -30,10 +29,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F4F1EC",
-          "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
-          }
+          "image": "./assets/fi-icons/splash.png",
+          "imageWidth": 120
         }
       ],
       "expo-sqlite",
