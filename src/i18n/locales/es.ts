@@ -141,6 +141,7 @@ export const es = {
     decrease: 'Restar',
     helpLabel: 'Qué significa {{label}}',
     increase: 'Sumar',
+    stepOf: 'Paso {{n}} de {{total}}',
     markPaid: 'Marcar {{name}} como pagado',
     markReceived: 'Marcar {{name}} como recibido',
     unmarkPaid: 'Desmarcar {{name}} como pagado',
@@ -646,6 +647,28 @@ export const es = {
     save: {
       ocasional: { gasto: 'Guardar gasto', ingreso: 'Guardar ingreso' },
       fijo: { gasto: 'Crear gasto fijo', ingreso: 'Crear ingreso fijo' },
+    },
+    next: 'Siguiente',
+    prev: 'Atrás',
+    steps: {
+      amount: 'Monto',
+      details: 'Detalle',
+      when: 'Fecha',
+      repeat: 'Repetición',
+      review: 'Resumen',
+    },
+    stepTitle: {
+      amount: '¿Cuánto y de qué tipo?',
+      details: {
+        gasto: '¿En qué se gastó?',
+        ingreso: '¿De dónde viene?',
+      },
+      when: {
+        gasto: '¿Cuándo y ya está pago?',
+        ingreso: '¿Cuándo y ya llegó?',
+      },
+      repeat: '¿Cada cuánto se repite?',
+      review: 'Revisa y ajusta',
     },
   },
 

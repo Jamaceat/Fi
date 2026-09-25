@@ -31,6 +31,9 @@ export const styles = StyleSheet.create({
   unitOn: { backgroundColor: C.card },
   wd: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   stepRow: { paddingVertical: 10, gap: 12 },
+  /** Selector de día desplegado bajo la periodicidad elegida. */
+  dayPanelWrap: { paddingHorizontal: 14, paddingBottom: 14 },
+  dayPanel: { gap: 10, padding: 12, borderRadius: 14, backgroundColor: C.panelOff, borderWidth: 1, borderColor: C.divider },
   upcoming: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 4 },
   upcomingOut: { backgroundColor: C.outPanel },
   upcomingIn: { backgroundColor: C.inSoft },

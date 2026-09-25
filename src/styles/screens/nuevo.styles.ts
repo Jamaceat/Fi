@@ -17,4 +17,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
+  /** Cuerpo de cada paso del asistente. */
+  step: { gap: 20 },
+  backBtn: { height: 56, borderRadius: 18, paddingHorizontal: 18 },
 });

@@ -1,12 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, BackHandler, View } from 'react-native';
+import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePicker } from '@/components/calendar';
 import { draftValues, FixedForm, kindPatch, newFixedDraft, type FixedDraft } from '@/components/fixed-form';
-import { IconCalendar, IconClose, IconTrash } from '@/components/icons';
+import { IconCalendar, IconChevronLeft, IconClose, IconTrash } from '@/components/icons';
+import { StepIndicator } from '@/components/step-indicator';
 import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, Stack, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { deleteMovement, getMovement, insertFixed, insertMovement, updateMovement, type Movement } from '@/db/repo';
@@ -21,6 +23,17 @@ import { styles as st } from '@/styles/screens/nuevo.styles';
 type Freq = 'ocasional' | 'fijo';
 
 const FREQS: Freq[] = ['ocasional', 'fijo'];
+
+/**
+ * Pasos del asistente. Ocasional: monto → detalle → fecha y estado.
+ * Fijo: monto → detalle → repetición (primera fecha, periodicidad, día) → resumen (próximos pagos y opciones).
+ */
+type StepId = 'amount' | 'details' | 'when' | 'repeat' | 'review';
+
+const STEPS: Record<Freq, StepId[]> = {
+  ocasional: ['amount', 'details', 'when'],
+  fijo: ['amount', 'details', 'repeat', 'review'],
+};
 
 const categoriesOf = (kind: Kind) => tList(`categories.movement.${kind}`);
 const defaultCategory = (kind: Kind) => t(`categories.movementDefault.${kind}`);
@@ -47,6 +60,10 @@ export default function Nuevo() {
   const [fx, setFx] = useState<FixedDraft>(() => newFixedDraft(initialKind, settings, initialDate));
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Asistente: paso actual, último paso alcanzado y sentido de la animación.
+  const [step, setStep] = useState(0);
+  const [reached, setReached] = useState(0);
+  const [dir, setDir] = useState(1);
 
   useEffect(() => {
     if (!id) return;
@@ -75,10 +92,39 @@ export default function Nuevo() {
   // El fijo arranca en el periodo de la fecha elegida (hoy, o el día tocado en el calendario).
   const fixedStart = periodRange(periodOf(date, settings.monthStart), settings.monthStart).from;
 
+  // Editar no usa el asistente: todo en una sola pantalla.
+  const wizard = !id;
+  const steps = STEPS[isFixed ? 'fijo' : 'ocasional'];
+  const stepId = steps[step];
+  const isLast = step === steps.length - 1;
+
+  const goTo = (i: number) => {
+    setDir(i > step ? 1 : -1);
+    setStep(i);
+    setReached((r) => Math.max(r, i));
+  };
+
+  // Atrás del sistema (Android) retrocede un paso antes de cerrar la pantalla.
+  useEffect(() => {
+    if (!wizard || step === 0) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setDir(-1);
+      setStep((s) => s - 1);
+      return true;
+    });
+    return () => sub.remove();
+  }, [wizard, step]);
+
   const pickTipo = (next: Kind) => {
     setTipo(next);
     setCat(defaultCategory(next));
     setFx((prev) => ({ ...prev, ...kindPatch(prev, next, true, settings) }));
+  };
+
+  const pickFreq = (next: Freq) => {
+    setFreq(next);
+    // Cambian los pasos siguientes: hay que recorrerlos de nuevo.
+    setReached(0);
   };
 
   const pickDate = (iso: string) => {
@@ -136,9 +182,183 @@ export default function Nuevo() {
 
   const saveLabel = editing ? t('common.saveChanges') : t(`newMovement.save.${freq}.${tipo}`);
 
+  // ——— Bloques ———
+
+  const label = (text: string, optional?: boolean) => (
+    <T w={800} size={14}>
+      {text}
+      {optional && (
+        <T w={500} size={14} color={C.muted}>
+          {' '}
+          {t('common.optional')}
+        </T>
+      )}
+    </T>
+  );
+
+  const tipoPicker = !linked && (
+    <Segmented
+      options={[
+        { id: 'gasto', label: t('common.expense'), activeBg: C.out, activeFg: C.white },
+        { id: 'ingreso', label: t('common.income'), activeBg: C.in, activeFg: C.white },
+      ]}
+      value={tipo}
+      onChange={pickTipo}
+    />
+  );
+
+  const amountInput = (
+    <View style={st.amount}>
+      <T w={700} size={13} color={C.muted}>
+        {t('newMovement.amount')}
+      </T>
+      <AmountField
+        value={dots(amount)}
+        onChangeText={(text) => setAmount(cleanAmount(text))}
+        color={accent}
+        autoFocus={wizard && !amount}
+      />
+    </View>
+  );
+
+  const freqPicker = !editing && (
+    <Stack gap={10}>
+      {label(t('newMovement.frequency'))}
+      <Row gap={10}>
+        {FREQS.map((fid) => {
+          const on = freq === fid;
+          return (
+            <Tap
+              key={fid}
+              onPress={() => pickFreq(fid)}
+              accessibilityState={{ selected: on }}
+              style={[st.freq, on && [st.freqOn, { borderColor: accent }]]}>
+              <T w={800} size={14.5}>
+                {t(`newMovement.freq.${fid}.title`)}
+              </T>
+              <T size={12.5} color={C.muted}>
+                {t(`newMovement.freq.${fid}.desc`)}
+              </T>
+            </Tap>
+          );
+        })}
+      </Row>
+    </Stack>
+  );
+
+  const categoryGrid = (
+    <Stack gap={10}>
+      {label(t('newMovement.category'))}
+      <View style={st.grid}>
+        {cats.map((c) => {
+          const on = c === cat;
+          return (
+            <Tap
+              key={c}
+              onPress={() => setCat(c)}
+              accessibilityState={{ selected: on }}
+              style={[st.cat, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
+              <T w={700} size={13} color={on ? C.white : C.ink} numberOfLines={1}>
+                {c}
+              </T>
+            </Tap>
+          );
+        })}
+      </View>
+    </Stack>
+  );
+
+  const noteField = (
+    <Stack gap={6}>
+      {label(t('newMovement.note'), true)}
+      <Field value={note} onChangeText={(text) => setNote(text.slice(0, 60))} placeholder={t('newMovement.notePlaceholder')} />
+    </Stack>
+  );
+
+  const dateButton = (
+    <Stack gap={6}>
+      {label(isFixed ? t(`newMovement.firstDate.${tipo}`) : t('newMovement.date'))}
+      <Tap onPress={() => setDateOpen(true)} style={common.dateBtn}>
+        <T w={600} size={14.5}>
+          {date === todayISO() ? t('newMovement.todayDate', { date: longDate(date) }) : longDate(date)}
+        </T>
+        <IconCalendar color={C.muted} />
+      </Tap>
+    </Stack>
+  );
+
+  const paidPicker = freq === 'ocasional' && !linked && (
+    <Stack gap={6}>
+      {label(t(`newMovement.paidQuestion.${tipo}`))}
+      <Segmented
+        options={[
+          { id: 'si', label: t(`newMovement.paidYes.${tipo}`), activeBg: accent, activeFg: C.white },
+          { id: 'no', label: t(`newMovement.paidNo.${tipo}`) },
+        ]}
+        value={paid ? 'si' : 'no'}
+        onChange={(v) => setPaid(v === 'si')}
+      />
+    </Stack>
+  );
+
+  const fixedForm = (sections: Parameters<typeof FixedForm>[0]['sections']) => (
+    <FixedForm
+      d={fxDraft}
+      set={setFxPatch}
+      startDate={fixedStart}
+      accent={accent}
+      hideAmount
+      hideCategory
+      nameOptional
+      sections={sections}
+    />
+  );
+
+  const stepBody = (s: StepId) => {
+    switch (s) {
+      case 'amount':
+        return (
+          <>
+            {tipoPicker}
+            {amountInput}
+            {freqPicker}
+          </>
+        );
+      case 'details':
+        return (
+          <>
+            {categoryGrid}
+            {isFixed ? fixedForm(['info']) : noteField}
+          </>
+        );
+      case 'when':
+        return (
+          <>
+            {dateButton}
+            {paidPicker}
+          </>
+        );
+      case 'repeat':
+        return (
+          <>
+            {dateButton}
+            {fixedForm(['frequency'])}
+          </>
+        );
+      case 'review':
+        return fixedForm(['summary', 'upcoming', 'options']);
+    }
+  };
+
+  const stepTitle = (s: StepId) =>
+    s === 'details' || s === 'when' ? t(`newMovement.stepTitle.${s}.${tipo}`) : t(`newMovement.stepTitle.${s}`);
+
+  const canNext = n > 0 && !saving;
+
   return (
     <View style={layout.screen}>
-      <Screen bottom={140} gap={20}>
+      {/* Con `key` cada paso arranca con el scroll arriba. */}
+      <Screen key={wizard ? stepId : 'edit'} bottom={140} gap={20}>
         <Row style={layout.between}>
           <RoundButton label={t('common.close')} onPress={() => router.back()}>
             <IconClose />
@@ -155,121 +375,63 @@ export default function Nuevo() {
           )}
         </Row>
 
-        {!linked && (
-          <Segmented
-            options={[
-              { id: 'gasto', label: t('common.expense'), activeBg: C.out, activeFg: C.white },
-              { id: 'ingreso', label: t('common.income'), activeBg: C.in, activeFg: C.white },
-            ]}
-            value={tipo}
-            onChange={pickTipo}
-          />
-        )}
-
-        <View style={st.amount}>
-          <T w={700} size={13} color={C.muted}>
-            {t('newMovement.amount')}
-          </T>
-          <AmountField value={dots(amount)} onChangeText={(text) => setAmount(cleanAmount(text))} color={accent} autoFocus={!id} />
-        </View>
-
-        {!editing && (
-          <Stack gap={10}>
-            <T w={800} size={14}>
-              {t('newMovement.frequency')}
-            </T>
-            <Row gap={10}>
-              {FREQS.map((fid) => {
-                const on = freq === fid;
-                return (
-                  <Tap
-                    key={fid}
-                    onPress={() => setFreq(fid)}
-                    accessibilityState={{ selected: on }}
-                    style={[st.freq, on && [st.freqOn, { borderColor: accent }]]}>
-                    <T w={800} size={14.5}>
-                      {t(`newMovement.freq.${fid}.title`)}
-                    </T>
-                    <T size={12.5} color={C.muted}>
-                      {t(`newMovement.freq.${fid}.desc`)}
-                    </T>
-                  </Tap>
-                );
-              })}
-            </Row>
-          </Stack>
-        )}
-
-        <Stack gap={10}>
-          <T w={800} size={14}>
-            {t('newMovement.category')}
-          </T>
-          <View style={st.grid}>
-            {cats.map((c) => {
-              const on = c === cat;
-              return (
-                <Tap
-                  key={c}
-                  onPress={() => setCat(c)}
-                  accessibilityState={{ selected: on }}
-                  style={[st.cat, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
-                  <T w={700} size={13} color={on ? C.white : C.ink} numberOfLines={1}>
-                    {c}
-                  </T>
-                </Tap>
-              );
-            })}
-          </View>
-        </Stack>
-
-        <Stack gap={10}>
-          <Stack gap={6}>
-            <T w={800} size={14}>
-              {isFixed ? t(`newMovement.firstDate.${tipo}`) : t('newMovement.date')}
-            </T>
-            <Tap onPress={() => setDateOpen(true)} style={common.dateBtn}>
-              <T w={600} size={14.5}>
-                {date === todayISO() ? t('newMovement.todayDate', { date: longDate(date) }) : longDate(date)}
-              </T>
-              <IconCalendar color={C.muted} />
-            </Tap>
-          </Stack>
-          {!isFixed && (
-            <Stack gap={6}>
-              <T w={800} size={14}>
-                {t('newMovement.note')}{' '}
-                <T w={500} size={14} color={C.muted}>
-                  {t('common.optional')}
-                </T>
-              </T>
-              <Field value={note} onChangeText={(text) => setNote(text.slice(0, 60))} placeholder={t('newMovement.notePlaceholder')} />
-            </Stack>
-          )}
-        </Stack>
-
-        {isFixed && (
-          <FixedForm d={fxDraft} set={setFxPatch} startDate={fixedStart} accent={accent} hideAmount hideCategory nameOptional />
-        )}
-
-        {freq === 'ocasional' && !linked && (
-          <Stack gap={6}>
-            <T w={800} size={14}>
-              {t(`newMovement.paidQuestion.${tipo}`)}
-            </T>
-            <Segmented
-              options={[
-                { id: 'si', label: t(`newMovement.paidYes.${tipo}`), activeBg: accent, activeFg: C.white },
-                { id: 'no', label: t(`newMovement.paidNo.${tipo}`) },
-              ]}
-              value={paid ? 'si' : 'no'}
-              onChange={(v) => setPaid(v === 'si')}
+        {wizard ? (
+          <>
+            <StepIndicator
+              labels={steps.map((s) => t(`newMovement.steps.${s}`))}
+              current={step}
+              reached={n > 0 ? reached : 0}
+              accent={accent}
+              onPick={goTo}
             />
-          </Stack>
+            <Animated.View key={stepId} entering={(dir > 0 ? FadeInRight : FadeInLeft).duration(220)} style={st.step}>
+              <T serif w={600} size={26}>
+                {stepTitle(stepId)}
+              </T>
+              {stepBody(stepId)}
+            </Animated.View>
+          </>
+        ) : (
+          <>
+            {stepBody('amount')}
+            {stepBody('details')}
+            {stepBody('when')}
+          </>
         )}
       </Screen>
 
       <View style={[common.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <PrimaryButton label={saveLabel} bg={accent} disabled={n <= 0 || saving} onPress={save} />
+        {wizard ? (
+          <Row gap={10}>
+            {step > 0 && (
+              <Tap
+                onPress={() => goTo(step - 1)}
+                accessibilityRole="button"
+                accessibilityLabel={t('newMovement.prev')}
+                style={[common.outlineBtn, st.backBtn]}>
+                <IconChevronLeft size={18} />
+                <T w={800} size={15}>
+                  {t('newMovement.prev')}
+                </T>
+              </Tap>
+            )}
+            <View style={layout.fill}>
+              {isLast ? (
+                <PrimaryButton label={saveLabel} bg={accent} disabled={!canNext} onPress={save} />
+              ) : (
+                <PrimaryButton
+                  label={t('newMovement.next')}
+                  bg={accent}
+                  icon={false}
+                  disabled={!canNext}
+                  onPress={() => goTo(step + 1)}
+                />
+              )}
+            </View>
+          </Row>
+        ) : (
+          <PrimaryButton label={saveLabel} bg={accent} disabled={!canNext} onPress={save} />
+        )}
       </View>
 
       <Sheet visible={dateOpen} onClose={() => setDateOpen(false)} title={t('newMovement.date')}>

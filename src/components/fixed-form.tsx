@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
+import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
-import { Field, RadioDot, Row, Stack, Stepper, SwitchRow, T, Tap } from '@/components/ui';
+import { Field, RadioDot, Row, Stack, Stepper, SwitchRow, T, Tap, useScrollIntoView } from '@/components/ui';
 import { C } from '@/constants/theme';
 import type { Fixed } from '@/db/repo';
 import { t, tList } from '@/i18n';
@@ -168,6 +170,15 @@ const inDays = (diff: number) =>
 
 const remindLabel = (days: number) => (days === 0 ? t('fixedForm.remind.sameDay') : t('fixedForm.remind.daysBefore', { count: days }));
 
+/** Bloques del formulario, en el orden en que se dibujan. El día de pago va dentro de `frequency`. */
+export type FixedSection = 'summary' | 'info' | 'frequency' | 'upcoming' | 'applyTo' | 'options';
+
+const ALL_SECTIONS: FixedSection[] = ['summary', 'info', 'frequency', 'upcoming', 'applyTo', 'options'];
+
+/** Las filas de periodicidad se deslizan cuando el selector de día se abre o se cierra. */
+const SLIDE_MS = 260;
+const SLIDE = LinearTransition.duration(SLIDE_MS);
+
 type Props = {
   d: FixedDraft;
   set: (patch: Partial<FixedDraft>) => void;
@@ -183,6 +194,8 @@ type Props = {
   /** La categoría se elige fuera del formulario. */
   hideCategory?: boolean;
   accent?: string;
+  /** Solo dibuja estos bloques (p. ej. un paso del asistente de Nuevo movimiento). */
+  sections?: FixedSection[];
 };
 
 /** Secciones del formulario de un fijo: resumen, datos, frecuencia, días, próximos pagos y opciones. */
@@ -198,8 +211,26 @@ export function FixedForm({
   nameOptional,
   hideCategory,
   accent = fixedAccent(d.kind),
+  sections = ALL_SECTIONS,
 }: Props) {
   const { settings, holidays } = useApp();
+  const show = (s: FixedSection) => sections.includes(s);
+  const scrollIntoView = useScrollIntoView();
+  // Periodicidad elegida (fila + selector de día): se centra en pantalla al cambiarla.
+  // Una ref fija por opción: Animated.View solo entrega la ref al montarse, así que no sirve moverla entre filas.
+  const [presetViews] = useState(() => new Map<Preset, View | null>());
+  const presetRef = (id: Preset) => (v: View | null) => {
+    presetViews.set(id, v);
+  };
+  const shownPreset = useRef(d.preset);
+
+  useEffect(() => {
+    if (shownPreset.current === d.preset) return;
+    shownPreset.current = d.preset;
+    // Espera a que termine el despliegue para medir la posición final.
+    const timer = setTimeout(() => scrollIntoView(presetViews.get(d.preset) ?? null), SLIDE_MS + 40);
+    return () => clearTimeout(timer);
+  }, [d.preset, presetViews, scrollIntoView]);
   const kind = d.kind;
   const isGasto = kind === 'gasto';
   const amount = Number(d.amount) || 0;
@@ -258,244 +289,262 @@ export function FixedForm({
         true,
       );
 
-  return (
-    <>
-      <View style={[st.hero, isGasto ? st.heroOut : st.heroIn]}>
-        <Row style={layout.betweenStart} gap={12}>
-          <Stack gap={2} style={layout.fill}>
-            <T w={700} size={13} color={heroSub} numberOfLines={1}>
-              {d.name.trim() || (nameOptional ? d.category : t('fixedForm.unnamed'))}
-            </T>
-            <T serif size={32} color={C.white} tabular numberOfLines={1} adjustsFontSizeToFit>
-              {amountText}
-            </T>
-            <T size={12.5} color={heroSub}>
-              {t(`fixedForm.perEach.${kind}`)}
-            </T>
-          </Stack>
-          <T w={800} size={12} color={C.white} style={[st.pill, isGasto ? st.heroTileOut : st.heroTileIn]}>
-            {presetName(d.preset)}
-          </T>
-        </Row>
-        <Row gap={10}>
-          <View style={heroTile}>
-            <T w={600} size={12} color={heroSub}>
-              {t('fixedForm.monthlyEquivalent')}
-            </T>
-            <T w={800} size={16} color={C.white} tabular>
-              {APPROX + fmt((amount * py) / 12)}
-            </T>
-          </View>
-          <View style={heroTile}>
-            <T w={600} size={12} color={heroSub}>
-              {t('fixedForm.perYear')}
-            </T>
-            <T w={800} size={16} color={C.white} tabular>
-              {decimal(py)}
-            </T>
-          </View>
-        </Row>
-      </View>
-
-      <Stack gap={12}>
-        <Stack gap={6}>
-          <T w={800} size={14}>
-            {t('fixedForm.name')}
-            {nameOptional && (
-              <T w={500} size={14} color={C.muted}>
-                {' '}
-                {t('common.optional')}
-              </T>
-            )}
-          </T>
-          <Field
-            value={d.name}
-            onChangeText={(text) => set({ name: text.slice(0, 40) })}
-            placeholder={t(`fixedForm.namePlaceholder.${kind}`)}
-          />
-        </Stack>
-        {!hideCategory && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.catList}>
-            {cats.map((c) => {
-              const on = c === d.category;
-              return (
-                <Tap
-                  key={c}
-                  onPress={() => set({ category: c })}
-                  accessibilityState={{ selected: on }}
-                  style={[st.catChip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
-                  <T w={700} size={13} color={on ? C.white : C.ink}>
-                    {c}
-                  </T>
-                </Tap>
-              );
-            })}
-          </ScrollView>
-        )}
-        {!hideAmount && (
-          <Stack gap={6}>
-            <T w={800} size={14}>
-              {d.variable ? t('fixedForm.amountApprox') : t(`fixedForm.amountEach.${kind}`)}
-            </T>
-            <Row gap={6} style={st.amountRow}>
-              <T serif size={22}>
-                $
-              </T>
-              <TextInput
-                value={dots(d.amount)}
-                onChangeText={(text) => set({ amount: cleanAmount(text) })}
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor={C.placeholder}
-                style={st.amountInput}
-              />
-            </Row>
-          </Stack>
-        )}
-      </Stack>
-
-      <Stack gap={10}>
-        <T w={800} size={16}>
-          {t(`fixedForm.frequencyQuestion.${kind}`)}
-        </T>
-        <View style={common.box}>
-          {PRESETS.map((p, i) => {
-            const sel = p.id === d.preset;
+  // Se despliega debajo de la periodicidad elegida para no tener que bajar a buscarlo.
+  const dayPicker = (
+    <Animated.View key={`${d.preset}-${weekly}`} entering={FadeInDown.duration(SLIDE_MS)} style={st.dayPanel}>
+      <T w={800} size={13.5}>
+        {dayQuestion}
+      </T>
+      {weekly ? (
+        <Row gap={6}>
+          {weekdayInitials().map((l, i) => {
+            const sel = i === d.weekday;
             return (
-              <Tap key={p.id} onPress={() => set({ preset: p.id })} style={[st.presetRow, i > 0 && common.divider]}>
-                <RadioDot on={sel} accent={accent} />
-                <Stack gap={1} style={layout.fill}>
-                  <T w={sel ? 800 : 700} size={14.5}>
-                    {presetName(p.id)}
-                  </T>
-                  <T size={12.5} color={C.muted}>
-                    {presetDesc(p.id)}
-                  </T>
-                </Stack>
-                {p.id === settings.defs[kind].preset && (
-                  <T w={800} size={11} color={C.muted} style={st.defTag}>
-                    {t('fixedForm.default')}
-                  </T>
-                )}
+              <Tap
+                key={i}
+                accessibilityLabel={weekdayName(i)}
+                accessibilityState={{ selected: sel }}
+                onPress={() => set({ weekday: i })}
+                style={[st.wd, { backgroundColor: sel ? accent : C.card, borderColor: sel ? accent : C.line }]}>
+                <T w={800} size={14} color={sel ? C.white : C.ink}>
+                  {l}
+                </T>
               </Tap>
             );
           })}
-        </View>
-        <View style={[common.box, st.customBox, isCustom ? { borderColor: accent } : st.customBoxOff]}>
-          <Tap onPress={() => set({ preset: 'custom' })} style={st.customHead}>
-            <RadioDot on={isCustom} accent={accent} />
-            <Stack gap={1} style={layout.fill}>
-              <T w={800} size={14.5}>
-                {presetName('custom')}
+        </Row>
+      ) : (
+        <>
+          <View style={[common.box, common.boxPadded]}>{dayStepper}</View>
+          <T size={12.5} color={C.muted}>
+            {t('fixedForm.day.shortMonthHint')}
+          </T>
+        </>
+      )}
+    </Animated.View>
+  );
+
+  return (
+    <>
+      {show('summary') && (
+        <View style={[st.hero, isGasto ? st.heroOut : st.heroIn]}>
+          <Row style={layout.betweenStart} gap={12}>
+            <Stack gap={2} style={layout.fill}>
+              <T w={700} size={13} color={heroSub} numberOfLines={1}>
+                {d.name.trim() || (nameOptional ? d.category : t('fixedForm.unnamed'))}
               </T>
-              <T size={12.5} color={C.muted}>
-                {presetDesc('custom')}
+              <T serif size={32} color={C.white} tabular numberOfLines={1} adjustsFontSizeToFit>
+                {amountText}
+              </T>
+              <T size={12.5} color={heroSub}>
+                {t(`fixedForm.perEach.${kind}`)}
               </T>
             </Stack>
-          </Tap>
-          <Row style={layout.between}>
-            <T w={700} size={14}>
-              {t('fixedForm.every')}
+            <T w={800} size={12} color={C.white} style={[st.pill, isGasto ? st.heroTileOut : st.heroTileIn]}>
+              {presetName(d.preset)}
             </T>
-            <Stepper
-              value={String(d.customN)}
-              onDec={() => set({ customN: Math.max(1, d.customN - 1), preset: 'custom' })}
-              onInc={() => set({ customN: Math.min(365, d.customN + 1), preset: 'custom' })}
-              decLabel={t('fixedForm.intervalDecrease')}
-              incLabel={t('fixedForm.intervalIncrease')}
+          </Row>
+          <Row gap={10}>
+            <View style={heroTile}>
+              <T w={600} size={12} color={heroSub}>
+                {t('fixedForm.monthlyEquivalent')}
+              </T>
+              <T w={800} size={16} color={C.white} tabular>
+                {APPROX + fmt((amount * py) / 12)}
+              </T>
+            </View>
+            <View style={heroTile}>
+              <T w={600} size={12} color={heroSub}>
+                {t('fixedForm.perYear')}
+              </T>
+              <T w={800} size={16} color={C.white} tabular>
+                {decimal(py)}
+              </T>
+            </View>
+          </Row>
+        </View>
+      )}
+
+      {show('info') && (
+        <Stack gap={12}>
+          <Stack gap={6}>
+            <T w={800} size={14}>
+              {t('fixedForm.name')}
+              {nameOptional && (
+                <T w={500} size={14} color={C.muted}>
+                  {' '}
+                  {t('common.optional')}
+                </T>
+              )}
+            </T>
+            <Field
+              value={d.name}
+              onChangeText={(text) => set({ name: text.slice(0, 40) })}
+              placeholder={t(`fixedForm.namePlaceholder.${kind}`)}
             />
-          </Row>
-          <Row gap={4} style={st.units}>
-            {UNITS.map((u) => {
-              const sel = u === d.customUnit;
-              return (
-                <Tap
-                  key={u}
-                  onPress={() => set({ customUnit: u, preset: 'custom' })}
-                  accessibilityState={{ selected: sel }}
-                  style={[st.unit, sel && (isCustom ? { backgroundColor: accent } : st.unitOn)]}>
-                  <T w={800} size={13} color={sel && isCustom ? C.white : sel ? C.ink : C.muted2}>
-                    {unitLabel(u)}
-                  </T>
-                </Tap>
-              );
-            })}
-          </Row>
-          <T w={600} size={12.5} color={C.muted}>
-            {isCustom ? t('fixedForm.repeats', every) : t('fixedForm.tapToUse', every)}
-          </T>
-        </View>
-      </Stack>
-
-      <Stack gap={10}>
-        <T w={800} size={16}>
-          {dayQuestion}
-        </T>
-        {weekly ? (
-          <Row gap={6}>
-            {weekdayInitials().map((l, i) => {
-              const sel = i === d.weekday;
-              return (
-                <Tap
-                  key={i}
-                  accessibilityLabel={weekdayName(i)}
-                  accessibilityState={{ selected: sel }}
-                  onPress={() => set({ weekday: i })}
-                  style={[st.wd, { backgroundColor: sel ? accent : C.card, borderColor: sel ? accent : C.line }]}>
-                  <T w={800} size={14} color={sel ? C.white : C.ink}>
-                    {l}
-                  </T>
-                </Tap>
-              );
-            })}
-          </Row>
-        ) : (
-          <>
-            <View style={[common.box, common.boxPadded]}>{dayStepper}</View>
-            <T size={12.5} color={C.muted}>
-              {t('fixedForm.day.shortMonthHint')}
-            </T>
-          </>
-        )}
-      </Stack>
-
-      <Stack gap={10}>
-        <T w={800} size={16}>
-          {t(`fixedForm.upcoming.${kind}`)}
-        </T>
-        <View style={[st.upcoming, isGasto ? st.upcomingOut : st.upcomingIn]}>
-          {upcoming.map((o, i) => {
-            const dd = fromISO(o.date);
-            const month = monthShort(dd.getMonth());
-            return (
-              <Row
-                key={o.due}
-                gap={12}
-                style={[st.upcomingRow, i > 0 && (isGasto ? st.upcomingDividerOut : st.upcomingDividerIn)]}>
-                <View style={st.dateBadge}>
-                  <T w={800} size={16} color={upcomingFg}>
-                    {dd.getDate()}
-                  </T>
-                  <T w={700} size={10.5} color={upcomingFg}>
-                    {month}
-                  </T>
-                </View>
-                <T w={700} size={13.5} color={upcomingFg} style={layout.fill}>
-                  {joinMeta(
-                    t('fixedForm.upcomingDate', { weekday: weekdayAbbr(weekdayOf(o.date)), day: dd.getDate(), month }),
-                    inDays(diffDays(o.date, today)),
-                  )}
+          </Stack>
+          {!hideCategory && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.catList}>
+              {cats.map((c) => {
+                const on = c === d.category;
+                return (
+                  <Tap
+                    key={c}
+                    onPress={() => set({ category: c })}
+                    accessibilityState={{ selected: on }}
+                    style={[st.catChip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
+                    <T w={700} size={13} color={on ? C.white : C.ink}>
+                      {c}
+                    </T>
+                  </Tap>
+                );
+              })}
+            </ScrollView>
+          )}
+          {!hideAmount && (
+            <Stack gap={6}>
+              <T w={800} size={14}>
+                {d.variable ? t('fixedForm.amountApprox') : t(`fixedForm.amountEach.${kind}`)}
+              </T>
+              <Row gap={6} style={st.amountRow}>
+                <T serif size={22}>
+                  $
                 </T>
-                <T w={800} size={13.5} color={upcomingFg} tabular>
-                  {amountText}
-                </T>
+                <TextInput
+                  value={dots(d.amount)}
+                  onChangeText={(text) => set({ amount: cleanAmount(text) })}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={C.placeholder}
+                  style={st.amountInput}
+                />
               </Row>
-            );
-          })}
-        </View>
-      </Stack>
+            </Stack>
+          )}
+        </Stack>
+      )}
 
-      {scheduleChanged(original, d) && onApplyTo && (
+      {show('frequency') && (
+        <Stack gap={10}>
+          <T w={800} size={16}>
+            {t(`fixedForm.frequencyQuestion.${kind}`)}
+          </T>
+          <Animated.View layout={SLIDE} style={common.box}>
+            {PRESETS.map((p, i) => {
+              const sel = p.id === d.preset;
+              return (
+                <Animated.View key={p.id} ref={presetRef(p.id)} layout={SLIDE} style={i > 0 && common.divider}>
+                  <Tap onPress={() => set({ preset: p.id })} style={st.presetRow}>
+                    <RadioDot on={sel} accent={accent} />
+                    <Stack gap={1} style={layout.fill}>
+                      <T w={sel ? 800 : 700} size={14.5}>
+                        {presetName(p.id)}
+                      </T>
+                      <T size={12.5} color={C.muted}>
+                        {presetDesc(p.id)}
+                      </T>
+                    </Stack>
+                    {p.id === settings.defs[kind].preset && (
+                      <T w={800} size={11} color={C.muted} style={st.defTag}>
+                        {t('fixedForm.default')}
+                      </T>
+                    )}
+                  </Tap>
+                  {sel && <View style={st.dayPanelWrap}>{dayPicker}</View>}
+                </Animated.View>
+              );
+            })}
+          </Animated.View>
+          <Animated.View
+            ref={presetRef('custom')}
+            layout={SLIDE}
+            style={[common.box, st.customBox, isCustom ? { borderColor: accent } : st.customBoxOff]}>
+            <Tap onPress={() => set({ preset: 'custom' })} style={st.customHead}>
+              <RadioDot on={isCustom} accent={accent} />
+              <Stack gap={1} style={layout.fill}>
+                <T w={800} size={14.5}>
+                  {presetName('custom')}
+                </T>
+                <T size={12.5} color={C.muted}>
+                  {presetDesc('custom')}
+                </T>
+              </Stack>
+            </Tap>
+            <Row style={layout.between}>
+              <T w={700} size={14}>
+                {t('fixedForm.every')}
+              </T>
+              <Stepper
+                value={String(d.customN)}
+                onDec={() => set({ customN: Math.max(1, d.customN - 1), preset: 'custom' })}
+                onInc={() => set({ customN: Math.min(365, d.customN + 1), preset: 'custom' })}
+                decLabel={t('fixedForm.intervalDecrease')}
+                incLabel={t('fixedForm.intervalIncrease')}
+              />
+            </Row>
+            <Row gap={4} style={st.units}>
+              {UNITS.map((u) => {
+                const sel = u === d.customUnit;
+                return (
+                  <Tap
+                    key={u}
+                    onPress={() => set({ customUnit: u, preset: 'custom' })}
+                    accessibilityState={{ selected: sel }}
+                    style={[st.unit, sel && (isCustom ? { backgroundColor: accent } : st.unitOn)]}>
+                    <T w={800} size={13} color={sel && isCustom ? C.white : sel ? C.ink : C.muted2}>
+                      {unitLabel(u)}
+                    </T>
+                  </Tap>
+                );
+              })}
+            </Row>
+            <T w={600} size={12.5} color={C.muted}>
+              {isCustom ? t('fixedForm.repeats', every) : t('fixedForm.tapToUse', every)}
+            </T>
+            {isCustom && dayPicker}
+          </Animated.View>
+        </Stack>
+      )}
+
+      {show('upcoming') && (
+        <Stack gap={10}>
+          <T w={800} size={16}>
+            {t(`fixedForm.upcoming.${kind}`)}
+          </T>
+          <View style={[st.upcoming, isGasto ? st.upcomingOut : st.upcomingIn]}>
+            {upcoming.map((o, i) => {
+              const dd = fromISO(o.date);
+              const month = monthShort(dd.getMonth());
+              return (
+                <Row
+                  key={o.due}
+                  gap={12}
+                  style={[st.upcomingRow, i > 0 && (isGasto ? st.upcomingDividerOut : st.upcomingDividerIn)]}>
+                  <View style={st.dateBadge}>
+                    <T w={800} size={16} color={upcomingFg}>
+                      {dd.getDate()}
+                    </T>
+                    <T w={700} size={10.5} color={upcomingFg}>
+                      {month}
+                    </T>
+                  </View>
+                  <T w={700} size={13.5} color={upcomingFg} style={layout.fill}>
+                    {joinMeta(
+                      t('fixedForm.upcomingDate', { weekday: weekdayAbbr(weekdayOf(o.date)), day: dd.getDate(), month }),
+                      inDays(diffDays(o.date, today)),
+                    )}
+                  </T>
+                  <T w={800} size={13.5} color={upcomingFg} tabular>
+                    {amountText}
+                  </T>
+                </Row>
+              );
+            })}
+          </View>
+        </Stack>
+      )}
+
+      {show('applyTo') && scheduleChanged(original, d) && onApplyTo && (
         <Stack gap={10}>
           <T w={800} size={16}>
             {t('fixedForm.applyTo.title')}
@@ -518,59 +567,61 @@ export function FixedForm({
         </Stack>
       )}
 
-      <Stack gap={10}>
-        <T w={800} size={16}>
-          {t('fixedForm.options.title')}
-        </T>
-        <View style={[common.box, common.boxPadded]}>
-          <SwitchRow
-            first
-            accent={accent}
-            label={t('fixedForm.options.variable')}
-            desc={t(`fixedForm.options.variableDesc.${kind}`)}
-            on={d.variable}
-            onPress={() => set({ variable: !d.variable })}
-          />
-          <SwitchRow
-            accent={accent}
-            label={t(`fixedForm.options.anticipated.${kind}`)}
-            desc={anticipatedDesc}
-            help={t(`fixedForm.options.anticipatedHelp.${kind}`)}
-            on={d.anticipated}
-            disabled={lockAnticipated}
-            onPress={() => set({ anticipated: !d.anticipated })}
-          />
-          <SwitchRow
-            accent={accent}
-            label={t(`fixedForm.options.autoMove.${kind}`)}
-            desc={t('fixedForm.options.autoMoveDesc')}
-            on={d.autoMove}
-            onPress={() => set({ autoMove: !d.autoMove })}
-          />
-          <SwitchRow
-            accent={accent}
-            label={t('fixedForm.options.remind')}
-            desc={t(`fixedForm.options.remindDesc.${kind}`)}
-            on={d.remind}
-            onPress={() => set({ remind: !d.remind })}
-          />
-          {d.remind && (
-            <Row style={[st.stepRow, common.divider]}>
-              <T w={700} size={14.5} style={layout.fill}>
-                {t('fixedForm.remind.label')}
-              </T>
-              <Stepper
-                minWidth={96}
-                value={remindLabel(d.remindDays)}
-                onDec={() => set({ remindDays: Math.max(0, d.remindDays - 1) })}
-                onInc={() => set({ remindDays: Math.min(7, d.remindDays + 1) })}
-                decLabel={t('fixedForm.remind.decrease')}
-                incLabel={t('fixedForm.remind.increase')}
-              />
-            </Row>
-          )}
-        </View>
-      </Stack>
+      {show('options') && (
+        <Stack gap={10}>
+          <T w={800} size={16}>
+            {t('fixedForm.options.title')}
+          </T>
+          <View style={[common.box, common.boxPadded]}>
+            <SwitchRow
+              first
+              accent={accent}
+              label={t('fixedForm.options.variable')}
+              desc={t(`fixedForm.options.variableDesc.${kind}`)}
+              on={d.variable}
+              onPress={() => set({ variable: !d.variable })}
+            />
+            <SwitchRow
+              accent={accent}
+              label={t(`fixedForm.options.anticipated.${kind}`)}
+              desc={anticipatedDesc}
+              help={t(`fixedForm.options.anticipatedHelp.${kind}`)}
+              on={d.anticipated}
+              disabled={lockAnticipated}
+              onPress={() => set({ anticipated: !d.anticipated })}
+            />
+            <SwitchRow
+              accent={accent}
+              label={t(`fixedForm.options.autoMove.${kind}`)}
+              desc={t('fixedForm.options.autoMoveDesc')}
+              on={d.autoMove}
+              onPress={() => set({ autoMove: !d.autoMove })}
+            />
+            <SwitchRow
+              accent={accent}
+              label={t('fixedForm.options.remind')}
+              desc={t(`fixedForm.options.remindDesc.${kind}`)}
+              on={d.remind}
+              onPress={() => set({ remind: !d.remind })}
+            />
+            {d.remind && (
+              <Row style={[st.stepRow, common.divider]}>
+                <T w={700} size={14.5} style={layout.fill}>
+                  {t('fixedForm.remind.label')}
+                </T>
+                <Stepper
+                  minWidth={96}
+                  value={remindLabel(d.remindDays)}
+                  onDec={() => set({ remindDays: Math.max(0, d.remindDays - 1) })}
+                  onInc={() => set({ remindDays: Math.min(7, d.remindDays + 1) })}
+                  decLabel={t('fixedForm.remind.decrease')}
+                  incLabel={t('fixedForm.remind.increase')}
+                />
+              </Row>
+            )}
+          </View>
+        </Stack>
+      )}
     </>
   );
 }

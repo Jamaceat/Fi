@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -42,23 +42,59 @@ export function T({ w = 500, serif, size = 14, color = C.ink, tabular, style, ..
 
 // ——— Contenedores ———
 
+type ScrollIntoView = (node: View | null) => void;
+
+const ScreenScroll = createContext<ScrollIntoView>(() => {});
+
+/** Desplaza el `Screen` que contiene a `node` para dejarlo centrado en la parte visible. */
+export const useScrollIntoView = () => useContext(ScreenScroll);
+
 export function Screen({
   children,
   bottom = 112,
   gap = 18,
 }: {
   children: ReactNode;
+  /** Espacio al final; también se descuenta al centrar, porque ahí suele ir la barra inferior. */
   bottom?: number;
   gap?: number;
 }) {
   const insets = useSafeAreaInsets();
+  const scroll = useRef<ScrollView>(null);
+  const content = useRef<View>(null);
+  const viewHeight = useRef(0);
+
+  const scrollIntoView = useCallback<ScrollIntoView>(
+    (node) => {
+      const sv = scroll.current;
+      const inner = content.current;
+      if (!node || !sv || !inner) return;
+      // Posición dentro del contenido, no en la ventana: no depende del desplazamiento actual,
+      // que queda desactualizado cuando el contenido se encoge sin disparar onScroll.
+      node.measureLayout(inner, (_x, y, _w, h) => {
+        // Zona visible: entre la barra de estado y la barra inferior.
+        const visible = viewHeight.current - insets.top - bottom;
+        // Centrado; si no cabe, que se vea desde arriba.
+        const margin = insets.top + Math.max(16, (visible - h) / 2);
+        sv.scrollTo({ y: Math.max(0, y - margin), animated: true });
+      });
+    },
+    [bottom, insets.top],
+  );
+
   return (
-    <ScrollView
-      style={s.screen}
-      contentContainerStyle={[s.screenContent, { paddingTop: insets.top + 16, paddingBottom: bottom, gap }]}
-      keyboardShouldPersistTaps="handled">
-      {children}
-    </ScrollView>
+    <ScreenScroll.Provider value={scrollIntoView}>
+      <ScrollView
+        ref={scroll}
+        // Los tipos de RN aún piden RefObject<View> sin null (anterior a React 19).
+        innerViewRef={content as RefObject<View>}
+        style={s.screen}
+        contentContainerStyle={[s.screenContent, { paddingTop: insets.top + 16, paddingBottom: bottom, gap }]}
+        onLayout={(e) => (viewHeight.current = e.nativeEvent.layout.height)}
+        keyboardShouldPersistTaps="handled">
+        {children}
+      </ScrollView>
+    </ScreenScroll.Provider>
   );
 }
 
