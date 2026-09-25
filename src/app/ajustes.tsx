@@ -3,7 +3,15 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
-import { IconCalendar, IconChevronDown, IconDownload, IconRefresh, IconTrash } from '@/components/icons';
+import {
+  IconCalendar,
+  IconChevronDown,
+  IconChevronRight,
+  IconDownload,
+  IconLayout,
+  IconRefresh,
+  IconTrash,
+} from '@/components/icons';
 import { Field, Header, RadioDot, Row, Screen, Stepper, SwitchRow, T, Tap, Toast } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
@@ -365,6 +373,26 @@ export default function Ajustes() {
             </T>
           </Row>
         </View>
+      </View>
+
+      <View style={{ gap: 10 }}>
+        <T w={800} size={16}>
+          Pantalla de inicio
+        </T>
+        <Tap onPress={() => router.push('/orden-inicio')} style={[st.box, st.defRow]} accessibilityRole="button">
+          <View style={[st.defIcon, { backgroundColor: C.chip }]}>
+            <IconLayout />
+          </View>
+          <View style={{ flex: 1, gap: 1 }}>
+            <T w={700} size={14.5}>
+              Cambiar orden de los bloques
+            </T>
+            <T w={600} size={12.5} color={C.muted}>
+              Arrastra balance, ahorro, calendario y más en una maqueta.
+            </T>
+          </View>
+          <IconChevronRight size={16} color={C.faint} />
+        </Tap>
       </View>
 
       <View style={{ gap: 10 }}>

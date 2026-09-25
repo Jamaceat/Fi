@@ -13,6 +13,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { PrimaryButton, T } from '@/components/ui';
 import { C } from '@/constants/theme';
@@ -40,21 +41,24 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <SQLiteProvider databaseName={DB_NAME} onInit={migrateDbIfNeeded}>
-      <AppProvider>
-        <StatusBar style="dark" />
-        <LockGate>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="nuevo" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="ahorro" />
-            <Stack.Screen name="ajustes" />
-            <Stack.Screen name="calendario" options={{ animation: 'fade_from_bottom' }} />
-            <Stack.Screen name="fijo/[id]" />
-          </Stack>
-        </LockGate>
-      </AppProvider>
-    </SQLiteProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SQLiteProvider databaseName={DB_NAME} onInit={migrateDbIfNeeded}>
+        <AppProvider>
+          <StatusBar style="dark" />
+          <LockGate>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="nuevo" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="ahorro" />
+              <Stack.Screen name="ajustes" />
+              <Stack.Screen name="calendario" options={{ animation: 'fade_from_bottom' }} />
+              <Stack.Screen name="fijo/[id]" />
+              <Stack.Screen name="orden-inicio" />
+            </Stack>
+          </LockGate>
+        </AppProvider>
+      </SQLiteProvider>
+    </GestureHandlerRootView>
   );
 }
 

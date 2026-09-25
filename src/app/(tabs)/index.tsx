@@ -1,12 +1,12 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { CalendarCard } from '@/components/calendar';
 import { IconChevronLeft, IconChevronRight, IconClock, IconExpense, IconGear, IconIncome } from '@/components/icons';
 import { Card, LinkText, MovementRow, Progress, RoundButton, Row, Screen, SectionTitle, T, Tap, Toast } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, listSavings, loadFixedData } from '@/db/repo';
+import { listMovements, listSavings, loadFixedData, type HomeBlock } from '@/db/repo';
 import { periodName, shiftPeriod, shortDate } from '@/lib/dates';
 import { fixedItems, sum } from '@/lib/finance';
 import { fmt, plural, signed } from '@/lib/format';
@@ -55,34 +55,9 @@ export default function Inicio() {
 
   const overBudget = settings.budgetAlert && inc > 0 && spentPct >= settings.budget;
 
-  return (
-    <Screen>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <View style={{ gap: 2 }}>
-          <T w={600} size={13} color={C.muted}>
-            Mis finanzas · {period.year}
-          </T>
-          <T serif w={600} size={32} style={{ letterSpacing: -0.5 }}>
-            {periodName(period)}
-          </T>
-        </View>
-        <Row gap={8}>
-          <RoundButton label="Mes anterior" onPress={() => setPeriod(shiftPeriod(period, -1))}>
-            <IconChevronLeft />
-          </RoundButton>
-          <RoundButton label="Mes siguiente" onPress={() => setPeriod(shiftPeriod(period, 1))}>
-            <IconChevronRight />
-          </RoundButton>
-          <RoundButton label="Ajustes" onPress={() => router.push('/ajustes')}>
-            <IconGear />
-          </RoundButton>
-        </Row>
-      </Row>
-
-      {overBudget && (
-        <Toast warn title={`Llevas el ${spentPct} % de tus ingresos`} text={`Tu alerta está en el ${settings.budget} %.`} />
-      )}
-
+  // Cada bloque se dibuja en el orden elegido en Ajustes → Orden de Inicio.
+  const blocks: Record<HomeBlock, ReactNode> = {
+    hero: (
       <Tap
         disabled={!settings.hideAmounts}
         onPress={() => setRevealed((r) => !r)}
@@ -127,7 +102,9 @@ export default function Inicio() {
           </View>
         </Row>
       </Tap>
+    ),
 
+    savings: (
       <Tap onPress={() => router.push('/ahorro')} style={st.savings} accessibilityLabel="Abrir ahorro">
         <View style={{ flex: 1, gap: 2 }}>
           <T w={700} size={12.5} color={C.inSub}>
@@ -144,36 +121,38 @@ export default function Inicio() {
           <IconChevronRight color="#F4F8FB" />
         </View>
       </Tap>
+    ),
 
-      {pendingIncome && (
-        <Tap
-          onPress={() => router.navigate({ pathname: '/fijos', params: { tab: 'ingresos' } })}
-          style={[st.pending]}
-          accessibilityLabel={`Ingreso fijo pendiente: ${pendingIncome.name}. Revisar`}>
-          <View style={st.pendingIcon}>
-            <IconClock color={C.inDark} />
-          </View>
-          <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
-            <T w={700} size={12} color={C.warn}>
-              Ingreso fijo pendiente
-            </T>
-            <T w={700} size={14.5} numberOfLines={1}>
-              {pendingIncome.name}
-            </T>
-            <T size={12.5} color={C.muted}>
-              Esperado el {shortDate(pendingIncome.occ.date)} · {money(pendingIncome.amount)}
-            </T>
-          </View>
-          <View style={st.review}>
-            <T w={800} size={13} color="#FFFFFF">
-              Revisar
-            </T>
-          </View>
-        </Tap>
-      )}
+    pending: pendingIncome && (
+      <Tap
+        onPress={() => router.navigate({ pathname: '/fijos', params: { tab: 'ingresos' } })}
+        style={[st.pending]}
+        accessibilityLabel={`Ingreso fijo pendiente: ${pendingIncome.name}. Revisar`}>
+        <View style={st.pendingIcon}>
+          <IconClock color={C.inDark} />
+        </View>
+        <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+          <T w={700} size={12} color={C.warn}>
+            Ingreso fijo pendiente
+          </T>
+          <T w={700} size={14.5} numberOfLines={1}>
+            {pendingIncome.name}
+          </T>
+          <T size={12.5} color={C.muted}>
+            Esperado el {shortDate(pendingIncome.occ.date)} · {money(pendingIncome.amount)}
+          </T>
+        </View>
+        <View style={st.review}>
+          <T w={800} size={13} color="#FFFFFF">
+            Revisar
+          </T>
+        </View>
+      </Tap>
+    ),
 
-      <CalendarCard />
+    calendar: <CalendarCard />,
 
+    breakdown: (
       <Card style={{ padding: 18, gap: 16 }}>
         <SectionTitle right={<LinkText onPress={() => router.navigate('/fijos')}>Ver fijos</LinkText>}>Gastos</SectionTitle>
         <Breakdown
@@ -213,7 +192,9 @@ export default function Inicio() {
           track={C.inTrack}
         />
       </Card>
+    ),
 
+    recent: (
       <View style={{ gap: 10 }}>
         <SectionTitle right={<LinkText onPress={() => router.navigate('/movimientos')}>Ver todos</LinkText>}>
           Últimos movimientos
@@ -238,6 +219,38 @@ export default function Inicio() {
           )}
         </Card>
       </View>
+    ),
+  };
+
+  return (
+    <Screen>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <View style={{ gap: 2 }}>
+          <T w={600} size={13} color={C.muted}>
+            Mis finanzas · {period.year}
+          </T>
+          <T serif w={600} size={32} style={{ letterSpacing: -0.5 }}>
+            {periodName(period)}
+          </T>
+        </View>
+        <Row gap={8}>
+          <RoundButton label="Mes anterior" onPress={() => setPeriod(shiftPeriod(period, -1))}>
+            <IconChevronLeft />
+          </RoundButton>
+          <RoundButton label="Mes siguiente" onPress={() => setPeriod(shiftPeriod(period, 1))}>
+            <IconChevronRight />
+          </RoundButton>
+          <RoundButton label="Ajustes" onPress={() => router.push('/ajustes')}>
+            <IconGear />
+          </RoundButton>
+        </Row>
+      </Row>
+
+      {overBudget && (
+        <Toast warn title={`Llevas el ${spentPct} % de tus ingresos`} text={`Tu alerta está en el ${settings.budget} %.`} />
+      )}
+
+      {settings.homeOrder.map((id) => blocks[id] && <Fragment key={id}>{blocks[id]}</Fragment>)}
     </Screen>
   );
 }

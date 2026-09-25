@@ -19,7 +19,7 @@ import {
   Tap,
 } from '@/components/ui';
 import { C, F } from '@/constants/theme';
-import { endFixed, getFixed, insertFixed, updateFixed, type Fixed } from '@/db/repo';
+import { endFixed, getFixed, hasResolved, insertFixed, updateFixed, type Fixed } from '@/db/repo';
 import { diffDays, fromISO, periodRange, todayISO, weekdayOf } from '@/lib/dates';
 import { cleanAmount, dots, fmt, MONTHS_SHORT, WD_ABBR, WD_FULL, WD_SHORT } from '@/lib/format';
 import {
@@ -95,9 +95,12 @@ export default function EditarFijo() {
   });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [applyTo, setApplyTo] = useState<'siguientes' | 'todos'>('siguientes');
+  // Con pagos ya marcados, pasar entre anticipado y vencido cambiaría cuál es la primera fecha.
+  const [lockAnticipated, setLockAnticipated] = useState(false);
 
   useEffect(() => {
     if (isNew) return;
+    hasResolved(db, Number(id)).then(setLockAnticipated);
     getFixed(db, Number(id)).then((f) => {
       if (!f) return;
       setOriginal(f);
@@ -519,7 +522,9 @@ export default function EditarFijo() {
               accent={accent}
               label={isGasto ? 'Pago anticipado' : 'Ingreso anticipado'}
               desc={
-                d.anticipated
+                lockAnticipated
+                  ? `Ya tiene ${isGasto ? 'pagos' : 'ingresos'} registrados, así que no se puede cambiar.`
+                  : d.anticipated
                   ? isGasto
                     ? 'Lo pagas desde este periodo.'
                     : 'Lo recibes desde este periodo.'
@@ -533,6 +538,7 @@ export default function EditarFijo() {
                   : '• Anticipado: te pagan al comenzar el periodo. El primer ingreso llega en este periodo.\n• Vencido (apagado): te pagan cuando el periodo termina, como un salario mes vencido. El primer ingreso llega el periodo siguiente.'
               }
               on={d.anticipated}
+              disabled={lockAnticipated}
               onPress={() => set({ anticipated: !d.anticipated })}
             />
             <SwitchRow

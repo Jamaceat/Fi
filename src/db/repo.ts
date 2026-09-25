@@ -61,6 +61,20 @@ export type Goal = { id: number; name: string; target: number; saved: number; la
 
 export type DefaultPeriod = { preset: Preset; n: number; unit: Unit };
 
+/** Bloques de Inicio que se pueden reordenar desde Ajustes. */
+export const HOME_BLOCKS = ['hero', 'savings', 'pending', 'calendar', 'breakdown', 'recent'] as const;
+export type HomeBlock = (typeof HOME_BLOCKS)[number];
+
+/** Quita ids desconocidos o repetidos y agrega al final los bloques que falten. */
+export function normalizeHomeOrder(order: unknown): HomeBlock[] {
+  const known = new Set<string>(HOME_BLOCKS);
+  const seen = new Set<HomeBlock>();
+  if (Array.isArray(order)) {
+    for (const id of order) if (known.has(id)) seen.add(id as HomeBlock);
+  }
+  return [...seen, ...HOME_BLOCKS.filter((b) => !seen.has(b))];
+}
+
 export type Settings = {
   defs: Record<Kind, DefaultPeriod>;
   monthStart: number;
@@ -74,6 +88,8 @@ export type Settings = {
   hour: '7:00' | '12:00' | '19:00';
   hideAmounts: boolean;
   lock: boolean;
+  /** Orden de los bloques en Inicio. */
+  homeOrder: HomeBlock[];
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -91,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hour: '7:00',
   hideAmounts: false,
   lock: false,
+  homeOrder: [...HOME_BLOCKS],
 };
 
 // ——— Ajustes ———
@@ -100,7 +117,12 @@ export async function getSettings(db: SQLiteDatabase): Promise<Settings> {
   if (!row) return DEFAULT_SETTINGS;
   try {
     const saved = JSON.parse(row.value) as Partial<Settings>;
-    return { ...DEFAULT_SETTINGS, ...saved, defs: { ...DEFAULT_SETTINGS.defs, ...saved.defs } };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...saved,
+      defs: { ...DEFAULT_SETTINGS.defs, ...saved.defs },
+      homeOrder: normalizeHomeOrder(saved.homeOrder),
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -199,6 +221,7 @@ export async function updateFixed(
   await db.withTransactionAsync(async () => {
     const old = await getFixed(db, id);
     if (!old) return;
+    if (old.anticipated !== f.anticipated && (await hasResolved(db, id))) f = { ...f, anticipated: old.anticipated };
     const scheduleChanged = SCHEDULE_COLS.some((c) => old[c] !== f[c]);
     const changed = scheduleChanged || old.amount !== f.amount;
     let validFrom = old.valid_from;
@@ -233,6 +256,15 @@ export async function updateFixed(
       [...cols.map((c) => f[c]), validFrom, id],
     );
   });
+}
+
+/**
+ * Tiene alguna ocurrencia pagada o descartada. Entonces ya no puede pasar entre anticipado y vencido:
+ * eso quita o agrega la primera fecha y dejaría esos pagos sin su ocurrencia.
+ */
+export async function hasResolved(db: SQLiteDatabase, id: number) {
+  const row = await db.getFirstAsync('SELECT 1 FROM fixed_status WHERE fixed_id = ? LIMIT 1', id);
+  return row != null;
 }
 
 export async function listSegments(db: SQLiteDatabase) {

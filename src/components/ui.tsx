@@ -214,15 +214,32 @@ export function Progress({ pct, color, track, height = 8 }: { pct: number; color
   );
 }
 
-export function Toggle({ on, onPress, label, accent = C.in }: { on: boolean; onPress: () => void; label: string; accent?: string }) {
+export function Toggle({
+  on,
+  onPress,
+  label,
+  accent = C.in,
+  disabled,
+}: {
+  on: boolean;
+  onPress: () => void;
+  label: string;
+  accent?: string;
+  disabled?: boolean;
+}) {
   return (
     <Tap
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="switch"
-      accessibilityState={{ checked: on }}
+      accessibilityState={{ checked: on, disabled }}
       accessibilityLabel={label}
       hitSlop={8}
-      style={[s.track, { backgroundColor: on ? accent : C.switchOff, justifyContent: on ? 'flex-end' : 'flex-start' }]}>
+      style={[
+        s.track,
+        { backgroundColor: on ? accent : C.switchOff, justifyContent: on ? 'flex-end' : 'flex-start' },
+        disabled && { opacity: 0.4 },
+      ]}>
       <View style={s.knob} />
     </Tap>
   );
@@ -264,6 +281,7 @@ export function SwitchRow({
   onPress,
   accent,
   first,
+  disabled,
 }: {
   label: string;
   desc: string;
@@ -273,6 +291,7 @@ export function SwitchRow({
   onPress: () => void;
   accent?: string;
   first?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <Row gap={12} style={[s.listRow, !first && s.divider, help && { zIndex: 1 }]}>
@@ -287,7 +306,7 @@ export function SwitchRow({
           {desc}
         </T>
       </View>
-      <Toggle on={on} onPress={onPress} label={label} accent={accent} />
+      <Toggle on={on} onPress={onPress} label={label} accent={accent} disabled={disabled} />
     </Row>
   );
 }

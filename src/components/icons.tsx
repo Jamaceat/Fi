@@ -46,6 +46,8 @@ export const IconTrash = make(['M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6
 export const IconDownload = make(['M12 4v11M7 10l5 5 5-5M5 20h14'], 1.9);
 export const IconExpand = make(['M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5'], 2);
 export const IconCollapse = make(['M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5'], 2);
+export const IconGrip = make(['M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01'], 3.2);
+export const IconLayout = make(['M4 4h16v6H4zM4 14h7v6H4zM15 14h5v6h-5z'], 1.9);
 export const IconWrench = make(
   ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
   1.9,
