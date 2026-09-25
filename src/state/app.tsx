@@ -1,9 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/db/repo';
 import { periodOf, periodRange, todayISO, type Period } from '@/lib/dates';
+import { loadHolidays, syncHolidays, type HolidayMap } from '@/lib/holidays';
 
 type AppState = {
   settings: Settings;
@@ -16,6 +17,22 @@ type AppState = {
   /** Cambia cada vez que se escribe en la base de datos, para recargar pantallas. */
   version: number;
   bump: () => void;
+  /** Festivos de Colombia en caché (fecha ISO → nombre). */
+  holidays: HolidayMap;
+  /** Año → fecha ISO de la última descarga. */
+  holidayYears: ReadonlyMap<number, string>;
+  /** Pide (en segundo plano) los años que falten o estén vencidos. */
+  needHolidays: (years: number[]) => void;
+  /** Vuelve a descargar todos los años conocidos ignorando la caché. */
+  refreshHolidays: () => Promise<{ updated: number; failed: number }>;
+};
+
+type HolidayState = { map: HolidayMap; fetched: ReadonlyMap<number, string> };
+const EMPTY_HOLIDAYS: HolidayState = { map: new Map(), fetched: new Map() };
+
+const aroundToday = () => {
+  const y = new Date().getFullYear();
+  return [y - 1, y, y + 1];
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -25,25 +42,66 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [period, setPeriod] = useState<Period | null>(null);
   const [version, setVersion] = useState(0);
+  const [hol, setHol] = useState<HolidayState | null>(null);
+  // Años ya pedidos en esta sesión, para no repetir la consulta en cada render.
+  const asked = useRef(new Set<number>());
+
+  const reloadHolidays = useCallback(async () => {
+    setHol(await loadHolidays(db));
+    setVersion((v) => v + 1);
+  }, [db]);
+
+  const sync = useCallback(
+    (years: number[], cacheDays: number, force = false) => {
+      years.forEach((y) => asked.current.add(y));
+      return syncHolidays(db, years, cacheDays, force).then(async (r) => {
+        if (r.updated) await reloadHolidays();
+        // Si falló (sin red), se reintenta la próxima vez que se necesite.
+        if (r.failed) years.forEach((y) => asked.current.delete(y));
+        return r;
+      });
+    },
+    [db, reloadHolidays],
+  );
 
   useEffect(() => {
-    getSettings(db).then((s) => {
+    Promise.all([getSettings(db), loadHolidays(db).catch(() => EMPTY_HOLIDAYS)]).then(([s, h]) => {
       setSettings(s);
       setPeriod(periodOf(todayISO(), s.monthStart));
+      setHol(h);
+      // Con la caché ya cargada se refresca en segundo plano lo que haga falta.
+      sync(aroundToday(), s.holidayCacheDays).catch(() => {});
     });
-  }, [db]);
+  }, [db, sync]);
+
+  const cacheDays = settings?.holidayCacheDays ?? DEFAULT_SETTINGS.holidayCacheDays;
+
+  const needHolidays = useCallback(
+    (years: number[]) => {
+      const todo = years.filter((y) => !asked.current.has(y));
+      if (todo.length) sync(todo, cacheDays).catch(() => {});
+    },
+    [sync, cacheDays],
+  );
+
+  const refreshHolidays = useCallback(
+    () => sync([...new Set([...aroundToday(), ...(hol?.fetched.keys() ?? [])])], cacheDays, true),
+    [sync, cacheDays, hol],
+  );
 
   const updateSettings = (patch: Partial<Settings>) => {
     const next = { ...(settings ?? DEFAULT_SETTINGS), ...patch };
     setSettings(next);
     saveSettings(db, next);
     if (patch.monthStart !== undefined) setPeriod(periodOf(todayISO(), next.monthStart));
+    // Una vigencia más corta puede dejar años vencidos: se revisan con la nueva.
+    if (patch.holidayCacheDays !== undefined && hol) sync([...hol.fetched.keys()], next.holidayCacheDays).catch(() => {});
     setVersion((v) => v + 1);
   };
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  if (!settings || !period) return null;
+  if (!settings || !period || !hol) return null;
 
   const value: AppState = {
     settings,
@@ -54,6 +112,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     range: periodRange(period, settings.monthStart),
     version,
     bump,
+    holidays: hol.map,
+    holidayYears: hol.fetched,
+    needHolidays,
+    refreshHolidays,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

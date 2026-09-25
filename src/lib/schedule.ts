@@ -31,14 +31,22 @@ export type Schedule = {
   weekday: number; // 0 = lunes
   custom_n: number;
   custom_unit: Unit;
+  /** 1 = anticipado: se paga desde el periodo en que empieza; 0 = vencido: desde el siguiente. */
+  anticipated: number;
   start_date: string; // primera fecha posible (inicio del periodo en que se creó)
   end_date: string | null; // al eliminar un fijo deja de repetirse después de esta fecha
 };
 
 export type Occurrence = {
   due: string; // fecha nominal: identifica la ocurrencia
-  date: string; // fecha ajustada por fin de semana
+  date: string; // fecha ajustada por fin de semana o festivo
 };
+
+/** Fechas festivas (ISO). Basta con `has`: sirve un Set o el Map de festivos. */
+export type HolidaySet = { has(iso: string): boolean };
+
+export const isBusinessDay = (iso: string, holidays?: HolidaySet) =>
+  weekdayOf(iso) < 5 && !holidays?.has(iso);
 
 export const perYear = (s: Pick<Schedule, 'preset' | 'custom_n' | 'custom_unit'>) => {
   if (s.preset !== 'custom') return PRESETS.find((p) => p.id === s.preset)!.perYear;
@@ -65,20 +73,33 @@ export const describeSchedule = (s: Schedule) => {
 export const isWeekly = (s: Pick<Schedule, 'preset' | 'custom_unit'>) =>
   s.preset === 'semanal' || (s.preset === 'custom' && s.custom_unit === 'semanas');
 
-const adjust = (iso: string, rule: HolidayRule) => {
+/** Mueve la fecha al día hábil anterior/siguiente si cae en fin de semana o festivo. */
+const adjust = (iso: string, rule: HolidayRule, holidays?: HolidaySet) => {
   if (rule === 'mantener') return iso;
-  const wd = weekdayOf(iso); // 5 sábado, 6 domingo
-  if (wd < 5) return iso;
-  if (rule === 'antes') return addDays(iso, wd === 5 ? -1 : -2);
-  return addDays(iso, wd === 5 ? 2 : 1);
+  const step = rule === 'antes' ? -1 : 1;
+  let d = iso;
+  // Un puente largo nunca pasa de unos pocos días; el tope evita un bucle infinito.
+  for (let i = 0; i < 14 && !isBusinessDay(d, holidays); i++) d = addDays(d, step);
+  return d;
 };
 
 /**
  * Ocurrencias de un fijo cuya fecha nominal cae en [from, to).
- * Solo se ajustan fines de semana (no hay calendario de festivos).
+ * La fecha real se ajusta según `rule` saltando fines de semana y los festivos dados.
  */
-export function occurrences(s: Schedule, from: string, to: string, rule: HolidayRule = 'mantener'): Occurrence[] {
-  const lo = s.start_date > from ? s.start_date : from;
+export function occurrences(
+  s: Schedule,
+  from: string,
+  to: string,
+  rule: HolidayRule = 'mantener',
+  holidays?: HolidaySet,
+): Occurrence[] {
+  let lo = s.start_date > from ? s.start_date : from;
+  if (!s.anticipated) {
+    // Vencido: el periodo en que empieza se paga en el siguiente, así que la primera fecha no cuenta.
+    const [first] = occurrences({ ...s, anticipated: 1, end_date: null }, s.start_date, addDays(s.start_date, 400));
+    if (first && first.due >= lo) lo = addDays(first.due, 1);
+  }
   let hi = to;
   if (s.end_date && s.end_date < hi) hi = addDays(s.end_date, 1);
   if (lo >= hi) return [];
@@ -120,16 +141,16 @@ export function occurrences(s: Schedule, from: string, to: string, rule: Holiday
   return [...new Set(out)]
     .filter((d) => d >= lo && d < hi)
     .sort()
-    .map((due) => ({ due, date: adjust(due, rule) }));
+    .map((due) => ({ due, date: adjust(due, rule, holidays) }));
 }
 
 /** Las próximas `count` ocurrencias desde `fromISO` (incluido). */
-export function nextOccurrences(s: Schedule, from: string, count: number, rule: HolidayRule) {
+export function nextOccurrences(s: Schedule, from: string, count: number, rule: HolidayRule, holidays?: HolidaySet) {
   const res: Occurrence[] = [];
   let a = from;
   for (let i = 0; i < 8 && res.length < count; i++) {
     const b = addDays(a, 400);
-    res.push(...occurrences(s, a, b, rule));
+    res.push(...occurrences(s, a, b, rule, holidays));
     a = b;
   }
   return res.slice(0, count);

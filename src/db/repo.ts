@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { todayISO } from '@/lib/dates';
+import { addDays, todayISO } from '@/lib/dates';
 import type { HolidayRule, Kind, Preset, Schedule, Unit } from '@/lib/schedule';
 
 // ——— Tipos ———
@@ -29,9 +29,23 @@ export type Fixed = Schedule & {
   remind: number;
   remind_days: number;
   active: number;
+  /** Fecha nominal desde la que aplica esta configuración (NULL = desde start_date). */
+  valid_from: string | null;
 };
 
-export type FixedInput = Omit<Fixed, 'id' | 'active' | 'end_date'>;
+export type FixedInput = Omit<Fixed, 'id' | 'active' | 'end_date' | 'valid_from'>;
+
+/** Configuración anterior de un fijo, vigente para fechas nominales en [valid_from, valid_to). */
+export type FixedSegment = Omit<Schedule, 'end_date' | 'anticipated'> & {
+  id: number;
+  fixed_id: number;
+  valid_from: string;
+  valid_to: string;
+  amount: number;
+};
+
+/** Ajuste de una sola ocurrencia: monto y/o fecha distintos a los del fijo. */
+export type Override = { amount: number | null; date: string | null };
 
 export type FixedStatus = {
   fixed_id: number;
@@ -51,6 +65,8 @@ export type Settings = {
   defs: Record<Kind, DefaultPeriod>;
   monthStart: number;
   holiday: HolidayRule;
+  /** Días que se reutilizan los festivos descargados antes de volver a pedirlos. */
+  holidayCacheDays: number;
   remindFijos: boolean;
   budgetAlert: boolean;
   budget: number;
@@ -67,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   monthStart: 1,
   holiday: 'antes',
+  holidayCacheDays: 30,
   remindFijos: true,
   budgetAlert: true,
   budget: 80,
@@ -153,7 +170,7 @@ export const getFixed = (db: SQLiteDatabase, id: number) =>
 
 const FIXED_COLS = [
   'type', 'name', 'category', 'amount', 'preset', 'day', 'day1', 'day2', 'weekday', 'custom_n',
-  'custom_unit', 'variable', 'auto_move', 'remind', 'remind_days', 'start_date',
+  'custom_unit', 'anticipated', 'variable', 'auto_move', 'remind', 'remind_days', 'start_date',
 ] as const;
 
 export async function insertFixed(db: SQLiteDatabase, f: FixedInput) {
@@ -164,12 +181,65 @@ export async function insertFixed(db: SQLiteDatabase, f: FixedInput) {
   return r.lastInsertRowId;
 }
 
-export async function updateFixed(db: SQLiteDatabase, id: number, f: Omit<FixedInput, 'start_date'>) {
+const SCHEDULE_COLS = ['preset', 'day', 'day1', 'day2', 'weekday', 'custom_n', 'custom_unit'] as const;
+
+/**
+ * Guarda los cambios de un fijo.
+ * - 'siguientes': la configuración anterior se conserva como tramo para las fechas ya pasadas o
+ *   resueltas; la nueva aplica desde hoy (o desde después del último pago marcado).
+ * - 'todos': reescribe el fijo completo, también hacia atrás (para corregir un error).
+ */
+export async function updateFixed(
+  db: SQLiteDatabase,
+  id: number,
+  f: Omit<FixedInput, 'start_date'>,
+  mode: 'siguientes' | 'todos' = 'siguientes',
+) {
   const cols = FIXED_COLS.filter((c) => c !== 'start_date');
-  await db.runAsync(
-    `UPDATE fixed SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
-    [...cols.map((c) => f[c]), id],
-  );
+  await db.withTransactionAsync(async () => {
+    const old = await getFixed(db, id);
+    if (!old) return;
+    const scheduleChanged = SCHEDULE_COLS.some((c) => old[c] !== f[c]);
+    const changed = scheduleChanged || old.amount !== f.amount;
+    let validFrom = old.valid_from;
+
+    if (mode === 'todos') {
+      await db.runAsync('DELETE FROM fixed_segments WHERE fixed_id = ?', id);
+      validFrom = null;
+    } else if (changed) {
+      const current = old.valid_from ?? old.start_date;
+      const last = await db.getFirstAsync<{ due: string | null }>(
+        'SELECT MAX(due_date) AS due FROM fixed_status WHERE fixed_id = ?',
+        id,
+      );
+      let from = todayISO();
+      if (last?.due && addDays(last.due, 1) > from) from = addDays(last.due, 1);
+      if (from > current) {
+        await db.runAsync(
+          `INSERT INTO fixed_segments (fixed_id, valid_from, valid_to, amount, ${SCHEDULE_COLS.join(', ')}, start_date)
+           VALUES (?, ?, ?, ?, ${SCHEDULE_COLS.map(() => '?').join(', ')}, ?)`,
+          [id, current, from, old.amount, ...SCHEDULE_COLS.map((c) => old[c]), old.start_date],
+        );
+        validFrom = from;
+      }
+      // Con otras fechas, los ajustes de ocurrencias que ya no existen sobran.
+      if (scheduleChanged) {
+        await db.runAsync('DELETE FROM fixed_overrides WHERE fixed_id = ? AND due_date >= ?', id, validFrom ?? current);
+      }
+    }
+
+    await db.runAsync(
+      `UPDATE fixed SET ${cols.map((c) => `${c} = ?`).join(', ')}, valid_from = ? WHERE id = ?`,
+      [...cols.map((c) => f[c]), validFrom, id],
+    );
+  });
+}
+
+export async function listSegments(db: SQLiteDatabase) {
+  const rows = await db.getAllAsync<FixedSegment>('SELECT * FROM fixed_segments ORDER BY valid_from');
+  const map = new Map<number, FixedSegment[]>();
+  for (const r of rows) map.set(r.fixed_id, [...(map.get(r.fixed_id) ?? []), r]);
+  return map;
 }
 
 /** Deja de repetirse; los pagos ya registrados se conservan. */
@@ -185,9 +255,40 @@ export async function statusMap(db: SQLiteDatabase) {
   return new Map(rows.map((r) => [statusKey(r.fixed_id, r.due_date), r]));
 }
 
+/** Ajustes de ocurrencias sueltas, por statusKey. */
+export async function overrideMap(db: SQLiteDatabase) {
+  const rows = await db.getAllAsync<Override & { fixed_id: number; due_date: string }>('SELECT * FROM fixed_overrides');
+  return new Map(rows.map((r) => [statusKey(r.fixed_id, r.due_date), { amount: r.amount, date: r.date }]));
+}
+
+/** Cambia el monto y/o la fecha de una sola ocurrencia sin tocar el fijo. Ambos null = sin ajuste. */
+export async function saveOverride(db: SQLiteDatabase, fixedId: number, due: string, o: Override) {
+  if (o.amount == null && o.date == null) return clearOverride(db, fixedId, due);
+  await db.runAsync(
+    `INSERT INTO fixed_overrides (fixed_id, due_date, amount, date) VALUES (?, ?, ?, ?)
+     ON CONFLICT(fixed_id, due_date) DO UPDATE SET amount = excluded.amount, date = excluded.date`,
+    fixedId, due, o.amount, o.date,
+  );
+}
+
+export const clearOverride = (db: SQLiteDatabase, fixedId: number, due: string) =>
+  db.runAsync('DELETE FROM fixed_overrides WHERE fixed_id = ? AND due_date = ?', fixedId, due);
+
+/** Todo lo necesario para calcular las ocurrencias de los fijos. */
+export async function loadFixedData(db: SQLiteDatabase) {
+  const [fixed, statuses, overrides, segments] = await Promise.all([
+    listFixed(db),
+    statusMap(db),
+    overrideMap(db),
+    listSegments(db),
+  ]);
+  return { fixed, statuses, overrides, segments };
+}
+
 /**
  * Marca una ocurrencia como pagada/recibida. Si el fijo tiene "Registrar al marcar",
  * crea el movimiento correspondiente. `extra` = confirmado en periodo extraordinario.
+ * `amount` y `date` deben venir de la ocurrencia (tramo y ajuste incluidos); por defecto, los del fijo.
  */
 export async function markPaid(
   db: SQLiteDatabase,
@@ -267,6 +368,8 @@ export const deleteGoal = (db: SQLiteDatabase, id: number) => db.runAsync('DELET
 export const wipeData = (db: SQLiteDatabase) =>
   db.execAsync(`
 DELETE FROM fixed_status;
+DELETE FROM fixed_overrides;
+DELETE FROM fixed_segments;
 DELETE FROM movements;
 DELETE FROM fixed;
 DELETE FROM savings_entries;

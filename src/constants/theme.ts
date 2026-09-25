@@ -38,6 +38,11 @@ export const C = {
   extraDark: '#5B3E8A',
   extraSoft: '#EFEAF7',
 
+  // Festivos (calendario)
+  holiday: '#2F7A55',
+  holidayDark: '#1F5A3D',
+  holidaySoft: '#E0F0E6',
+
   // Tarjeta oscura
   hero: '#1B1A17',
   heroTile: '#2A2925',

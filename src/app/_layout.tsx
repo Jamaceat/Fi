@@ -49,6 +49,7 @@ export default function RootLayout() {
             <Stack.Screen name="nuevo" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="ahorro" />
             <Stack.Screen name="ajustes" />
+            <Stack.Screen name="calendario" options={{ animation: 'fade_from_bottom' }} />
             <Stack.Screen name="fijo/[id]" />
           </Stack>
         </LockGate>

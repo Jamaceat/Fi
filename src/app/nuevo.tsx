@@ -1,10 +1,10 @@
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DatePicker } from '@/components/calendar';
 import { IconCalendar, IconClose, IconTrash } from '@/components/icons';
 import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
@@ -18,7 +18,7 @@ import {
   updateMovement,
   type Movement,
 } from '@/db/repo';
-import { fromISO, longDate, periodOf, periodRange, toISO, todayISO } from '@/lib/dates';
+import { fromISO, longDate, periodOf, periodRange, todayISO } from '@/lib/dates';
 import { cleanAmount, dots } from '@/lib/format';
 import { occurrences, type Kind } from '@/lib/schedule';
 import { useApp } from '@/state/app';
@@ -32,18 +32,20 @@ export default function Nuevo() {
   const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
   const { settings, bump } = useApp();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // `date` y `kind` preseleccionan un movimiento nuevo (p. ej. desde el calendario).
+  const { id, date: dateParam, kind } = useLocalSearchParams<{ id?: string; date?: string; kind?: string }>();
+  const initialDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayISO();
 
   const [editing, setEditing] = useState<Movement | null>(null);
-  const [tipo, setTipo] = useState<Kind>('gasto');
+  const [tipo, setTipo] = useState<Kind>(kind === 'ingreso' ? 'ingreso' : 'gasto');
   const [freq, setFreq] = useState<'ocasional' | 'fijo'>('ocasional');
-  const [cat, setCat] = useState('Mercado');
+  const [cat, setCat] = useState(kind === 'ingreso' ? 'Salario' : 'Mercado');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(initialDate);
   const [note, setNote] = useState('');
-  const [day, setDay] = useState(fromISO(todayISO()).getDate());
+  const [day, setDay] = useState(fromISO(initialDate).getDate());
   const [dayOpen, setDayOpen] = useState(false);
-  const [iosDateOpen, setIosDateOpen] = useState(false);
+  const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -71,21 +73,10 @@ export default function Nuevo() {
     setCat(t === 'gasto' ? 'Mercado' : 'Salario');
   };
 
-  const openDate = () => {
-    if (Platform.OS === 'android') {
-      DateTimePickerAndroid.open({
-        value: fromISO(date),
-        mode: 'date',
-        onChange: (e, d) => {
-          if (e.type === 'set' && d) {
-            setDate(toISO(d));
-            setDay(d.getDate());
-          }
-        },
-      });
-    } else {
-      setIosDateOpen(true);
-    }
+  const pickDate = (iso: string) => {
+    setDate(iso);
+    setDay(fromISO(iso).getDate());
+    setDateOpen(false);
   };
 
   const save = async () => {
@@ -119,6 +110,7 @@ export default function Nuevo() {
           weekday: 0,
           custom_n: 1,
           custom_unit: 'meses',
+          anticipated: 1,
           variable: 0,
           auto_move: 1,
           remind: 1,
@@ -267,7 +259,7 @@ export default function Nuevo() {
             <T w={800} size={14}>
               Fecha
             </T>
-            <Tap onPress={openDate} style={st.dateBtn}>
+            <Tap onPress={() => setDateOpen(true)} style={st.dateBtn}>
               <T w={600} size={14.5}>
                 {date === todayISO() ? `Hoy · ${longDate(date)}` : longDate(date)}
               </T>
@@ -311,23 +303,9 @@ export default function Nuevo() {
         </T>
       </Sheet>
 
-      {Platform.OS === 'ios' && (
-        <Sheet visible={iosDateOpen} onClose={() => setIosDateOpen(false)} title="Fecha">
-          <DateTimePicker
-            value={fromISO(date)}
-            mode="date"
-            display="inline"
-            accentColor={accent}
-            onChange={(_, d) => {
-              if (d) {
-                setDate(toISO(d));
-                setDay(d.getDate());
-              }
-            }}
-          />
-          <PrimaryButton label="Listo" bg={accent} onPress={() => setIosDateOpen(false)} />
-        </Sheet>
-      )}
+      <Sheet visible={dateOpen} onClose={() => setDateOpen(false)} title="Fecha">
+        <DatePicker value={date} onChange={pickDate} filter={tipo} />
+      </Sheet>
     </View>
   );
 }

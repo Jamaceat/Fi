@@ -3,11 +3,21 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-import { IconCheck, IconChevronRight, IconClose, IconPlus, IconRefresh, IconSearch } from '@/components/icons';
+import { DatePicker } from '@/components/calendar';
+import {
+  IconCalendar,
+  IconCheck,
+  IconChevronRight,
+  IconClose,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+} from '@/components/icons';
 import {
   AmountField,
   EmptyBox,
   Header,
+  LinkText,
   PrimaryButton,
   Progress,
   RoundButton,
@@ -20,8 +30,8 @@ import {
   Tap,
 } from '@/components/ui';
 import { C, F } from '@/constants/theme';
-import { listFixed, markPaid, statusMap, unmark } from '@/db/repo';
-import { periodName, shortDate } from '@/lib/dates';
+import { clearOverride, loadFixedData, markPaid, saveOverride, unmark } from '@/db/repo';
+import { longDate, periodName, shortDate } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
 import { cleanAmount, dots, fmt, plural } from '@/lib/format';
 import { describeSchedule } from '@/lib/schedule';
@@ -34,13 +44,15 @@ const norm = (t: string) =>
 
 export default function Fijos() {
   const db = useSQLiteContext();
-  const { period, range, settings, bump } = useApp();
+  const { period, range, settings, bump, holidays } = useApp();
   const params = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>(params.tab === 'ingresos' ? 'ingresos' : 'gastos');
   const [lastParam, setLastParam] = useState(params.tab);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [confirming, setConfirming] = useState<{ item: FixedItem; input: string } | null>(null);
+  const [adjusting, setAdjusting] = useState<{ item: FixedItem; input: string; date: string } | null>(null);
+  const [dateOpen, setDateOpen] = useState(false);
 
   // Inicio abre esta pestaña con ?tab=ingresos; se aplica una vez y se limpia el parámetro.
   if (params.tab !== lastParam) {
@@ -54,20 +66,50 @@ export default function Fijos() {
   const items =
     useLoad(
       async (d) => {
-        const [fixed, statuses] = await Promise.all([listFixed(d), statusMap(d)]);
-        return fixedItems(fixed, statuses, range.from, range.to, settings.holiday);
+        const data = await loadFixedData(d);
+        return fixedItems(data, range.from, range.to, settings.holiday, holidays);
       },
       [range.from, range.to, settings.holiday],
     ) ?? [];
+
+  // Pendiente: ajusta el monto o la fecha de esa vez. Pagado: se cambia desde el movimiento.
+  const openItem = (item: FixedItem) => {
+    if (item.paid) editFixed(item);
+    else {
+      setDateOpen(false);
+      setAdjusting({ item, input: String(item.amount), date: item.occ.date });
+    }
+  };
+
+  const saveAdjust = async () => {
+    if (!adjusting) return;
+    const amount = Number(adjusting.input) || 0;
+    if (amount <= 0) return;
+    const { item, date } = adjusting;
+    // Lo que coincide con lo que ya le toca no se guarda como ajuste.
+    await saveOverride(db, item.fixed.id, item.occ.due, {
+      amount: amount === item.base ? null : amount,
+      date: date === item.planned ? null : date,
+    });
+    setAdjusting(null);
+    bump();
+  };
+
+  const resetAdjust = async () => {
+    if (!adjusting) return;
+    await clearOverride(db, adjusting.item.fixed.id, adjusting.item.occ.due);
+    setAdjusting(null);
+    bump();
+  };
 
   const toggle = async (item: FixedItem) => {
     if (item.paid) {
       await unmark(db, item.fixed.id, item.occ.due);
     } else if (item.fixed.variable) {
-      setConfirming({ item, input: String(item.fixed.amount) });
+      setConfirming({ item, input: String(item.amount) });
       return;
     } else {
-      await markPaid(db, item.fixed, item.occ.due, { date: item.occ.date });
+      await markPaid(db, item.fixed, item.occ.due, { amount: item.amount, date: item.occ.date });
     }
     bump();
   };
@@ -201,7 +243,13 @@ export default function Fijos() {
             ) : (
               <View style={st.list}>
                 {gastos.map((item, i) => (
-                  <GastoRow key={`${item.fixed.id}-${item.occ.due}`} item={item} first={i === 0} onToggle={() => toggle(item)} />
+                  <GastoRow
+                    key={`${item.fixed.id}-${item.occ.due}`}
+                    item={item}
+                    first={i === 0}
+                    onToggle={() => toggle(item)}
+                    onOpen={() => openItem(item)}
+                  />
                 ))}
               </View>
             )}
@@ -235,7 +283,12 @@ export default function Fijos() {
             <EmptyBox title={q ? 'Sin ingresos que coincidan' : 'Sin ingresos fijos este mes'} hint={emptyHint} />
           )}
           {ingresos.map((item) => (
-            <IngresoCard key={`${item.fixed.id}-${item.occ.due}`} item={item} onToggle={() => toggle(item)} />
+            <IngresoCard
+              key={`${item.fixed.id}-${item.occ.due}`}
+              item={item}
+              onToggle={() => toggle(item)}
+              onOpen={() => openItem(item)}
+            />
           ))}
         </View>
       )}
@@ -262,14 +315,97 @@ export default function Fijos() {
           onPress={confirmVariable}
         />
       </Sheet>
+
+      <Sheet
+        visible={!!adjusting}
+        onClose={() => setAdjusting(null)}
+        title={adjusting ? `${adjusting.item.name} · ${shortDate(adjusting.item.planned)}` : ''}>
+        <T size={13} color={C.muted2}>
+          Cambia el monto o la fecha solo esta vez. Los demás pagos siguen igual (
+          {fmt(adjusting?.item.base ?? 0)}).
+        </T>
+        <View style={st.amountBox}>
+          <AmountField
+            size={40}
+            value={dots(adjusting?.input ?? '')}
+            onChangeText={(t) => adjusting && setAdjusting({ ...adjusting, input: cleanAmount(t) })}
+          />
+        </View>
+        <View style={{ gap: 6 }}>
+          <T w={800} size={14}>
+            {adjusting?.item.fixed.type === 'ingreso' ? 'Fecha en que llega' : 'Fecha de pago'}
+          </T>
+          <Tap onPress={() => setDateOpen((o) => !o)} style={st.dateBtn} accessibilityLabel="Cambiar la fecha de esta vez">
+            <T w={600} size={14.5}>
+              {adjusting ? longDate(adjusting.date) : ''}
+            </T>
+            <IconCalendar color={C.muted} />
+          </Tap>
+          {adjusting && adjusting.date !== adjusting.item.planned && (
+            <T size={12.5} color={C.warn}>
+              Le tocaba el {shortDate(adjusting.item.planned)}. Solo esta vez cambia de fecha.
+            </T>
+          )}
+          {dateOpen && adjusting && (
+            <DatePicker
+              value={adjusting.date}
+              filter={adjusting.item.fixed.type}
+              onChange={(iso) => {
+                setAdjusting({ ...adjusting, date: iso });
+                setDateOpen(false);
+              }}
+            />
+          )}
+        </View>
+        <PrimaryButton
+          label="Guardar solo esta vez"
+          bg={adjusting?.item.fixed.type === 'ingreso' ? C.in : C.ink}
+          disabled={!Number(adjusting?.input)}
+          onPress={saveAdjust}
+        />
+        <Row style={{ justifyContent: 'space-between' }}>
+          {adjusting && (adjusting.item.adjusted || adjusting.item.moved) ? (
+            <LinkText onPress={resetAdjust}>Quitar el ajuste</LinkText>
+          ) : (
+            <View />
+          )}
+          <LinkText
+            onPress={() => {
+              const item = adjusting?.item;
+              setAdjusting(null);
+              if (item) editFixed(item);
+            }}>
+            Editar el fijo
+          </LinkText>
+        </Row>
+      </Sheet>
     </Screen>
   );
 }
 
+const adjustNote = (item: FixedItem) =>
+  item.moved && item.adjusted
+    ? 'Monto y fecha cambiados solo esta vez'
+    : item.moved
+      ? `Fecha cambiada solo esta vez (era el ${shortDate(item.planned)})`
+      : item.adjusted
+        ? 'Monto ajustado solo esta vez'
+        : '';
+
 const editFixed = (item: FixedItem) =>
   router.push({ pathname: '/fijo/[id]', params: { id: String(item.fixed.id) } });
 
-function GastoRow({ item, first, onToggle }: { item: FixedItem; first: boolean; onToggle: () => void }) {
+function GastoRow({
+  item,
+  first,
+  onToggle,
+  onOpen,
+}: {
+  item: FixedItem;
+  first: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
   const p = item.paid;
   return (
     <Row gap={12} style={[{ paddingVertical: 10 }, !first && { borderTopWidth: 1, borderTopColor: C.divider }]}>
@@ -281,7 +417,7 @@ function GastoRow({ item, first, onToggle }: { item: FixedItem; first: boolean; 
         style={[st.check, { borderColor: p ? C.ink : C.ring, backgroundColor: p ? C.ink : C.card }]}>
         {p && <IconCheck size={18} color="#FFFFFF" />}
       </Tap>
-      <Tap onPress={() => editFixed(item)} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
+      <Tap onPress={onOpen} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
         <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
           <T w={700} size={15} numberOfLines={1}>
             {item.name}
@@ -290,7 +426,7 @@ function GastoRow({ item, first, onToggle }: { item: FixedItem; first: boolean; 
             {p ? `Pagado · ${shortDate(item.occ.date)}` : `Vence el ${shortDate(item.occ.date)}`}
           </T>
           <T w={700} size={11.5} color={C.muted} numberOfLines={1}>
-            {describeSchedule(item.fixed)}
+            {adjustNote(item) || describeSchedule(item.fixed)}
           </T>
         </View>
         <T w={800} size={15} tabular>
@@ -303,7 +439,7 @@ function GastoRow({ item, first, onToggle }: { item: FixedItem; first: boolean; 
   );
 }
 
-function IngresoCard({ item, onToggle }: { item: FixedItem; onToggle: () => void }) {
+function IngresoCard({ item, onToggle, onOpen }: { item: FixedItem; onToggle: () => void; onOpen: () => void }) {
   const p = item.paid;
   const statusColor = p ? C.in : C.warn;
   return (
@@ -320,10 +456,21 @@ function IngresoCard({ item, onToggle }: { item: FixedItem; onToggle: () => void
             </T>
           </Row>
         </View>
-        <T w={800} size={16} color={C.in} tabular>
-          {!p && item.fixed.variable ? '≈ ' : ''}
-          {fmt(item.amount)}
-        </T>
+        <Tap
+          onPress={onOpen}
+          disabled={p}
+          accessibilityLabel={`Cambiar monto de ${item.name} solo esta fecha`}
+          style={{ alignItems: 'flex-end', gap: 2, minHeight: 44, justifyContent: 'center' }}>
+          <T w={800} size={16} color={C.in} tabular>
+            {!p && item.fixed.variable ? '≈ ' : ''}
+            {fmt(item.amount)}
+          </T>
+          {!!adjustNote(item) && (
+            <T w={700} size={11} color={C.muted}>
+              {adjustNote(item)}
+            </T>
+          )}
+        </Tap>
       </Row>
       <Tap onPress={() => editFixed(item)} style={st.periodBtn} accessibilityLabel={`Editar ${item.name}`}>
         <IconRefresh color={C.inDark} stroke={1.9} />
@@ -390,4 +537,15 @@ const st = StyleSheet.create({
     gap: 8,
   },
   amountBox: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.line, paddingVertical: 14 },
+  dateBtn: {
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+  },
 });

@@ -3,14 +3,23 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
-import { IconCalendar, IconChevronDown, IconDownload, IconTrash } from '@/components/icons';
+import { IconCalendar, IconChevronDown, IconDownload, IconRefresh, IconTrash } from '@/components/icons';
 import { Field, Header, RadioDot, Row, Screen, Stepper, SwitchRow, T, Tap, Toast } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
 import { authenticate, canLock } from '@/lib/auth';
+import { longDate, toISO } from '@/lib/dates';
 import { exportCsv } from '@/lib/export';
 import { describePreset, PRESETS, UNITS, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
+
+const CACHE_OPTS = [
+  [7, '1 semana'],
+  [30, '1 mes'],
+  [90, '3 meses'],
+  [180, '6 meses'],
+  [365, '1 año'],
+] as const;
 
 const PRESET_OPTS: { id: Preset; label: string }[] = [
   ...PRESETS.map((p) => ({ id: p.id, label: p.name })),
@@ -19,7 +28,8 @@ const PRESET_OPTS: { id: Preset; label: string }[] = [
 
 export default function Ajustes() {
   const db = useSQLiteContext();
-  const { settings: s, updateSettings, bump } = useApp();
+  const { settings: s, updateSettings, bump, holidays, holidayYears, refreshHolidays } = useApp();
+  const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState<Kind | null>(null);
   const [wiping, setWiping] = useState(false);
   const [wipeText, setWipeText] = useState('');
@@ -44,6 +54,22 @@ export default function Ajustes() {
       setToast({ title: 'Exportación lista', text: `${name} con todos tus datos` });
     } catch (e) {
       setToast({ warn: true, title: 'No se pudo exportar', text: String(e) });
+    }
+  };
+
+  const lastSync = [...holidayYears.values()].sort().at(-1);
+  const years = [...holidayYears.keys()].sort();
+  const doRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const r = await refreshHolidays();
+      setToast(
+        r.failed
+          ? { warn: true, title: 'No se pudieron actualizar', text: 'Revisa tu conexión. Se siguen usando los festivos guardados.' }
+          : { title: 'Festivos actualizados', text: `${r.updated} ${r.updated === 1 ? 'año descargado' : 'años descargados'} de Nager.Date.` },
+      );
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -175,7 +201,7 @@ export default function Ajustes() {
           </Row>
           <View style={[st.divider, { paddingVertical: 12, gap: 8 }]}>
             <T w={700} size={14.5}>
-              Si un fijo cae en fin de semana
+              Si un fijo cae en fin de semana o festivo
             </T>
             {(
               [
@@ -187,6 +213,60 @@ export default function Ajustes() {
               <RadioOption key={id} label={label} on={s.holiday === id} onPress={() => updateSettings({ holiday: id })} />
             ))}
           </View>
+        </View>
+      </View>
+
+      <View style={{ gap: 10 }}>
+        <View style={{ gap: 4 }}>
+          <T w={800} size={16}>
+            Festivos de Colombia
+          </T>
+          <T size={12.5} color={C.muted}>
+            Se descargan de Nager.Date y se guardan en el teléfono. Mientras estén vigentes no se vuelven a pedir.
+          </T>
+        </View>
+        <View style={[st.box, { padding: 14, gap: 12 }]}>
+          <T w={700} size={14.5}>
+            Guardar festivos durante
+          </T>
+          <View style={st.optGrid}>
+            {CACHE_OPTS.map(([days, label]) => {
+              const sel = s.holidayCacheDays === days;
+              return (
+                <Tap
+                  key={days}
+                  onPress={() => updateSettings({ holidayCacheDays: days })}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: sel }}
+                  style={[st.opt, { backgroundColor: sel ? C.holiday : C.card, borderColor: sel ? C.holiday : C.line }]}>
+                  <T w={700} size={13} color={sel ? '#FFFFFF' : C.ink}>
+                    {label}
+                  </T>
+                </Tap>
+              );
+            })}
+          </View>
+          <Row gap={12} style={[st.divider, { paddingTop: 12 }]}>
+            <View style={[st.defIcon, { backgroundColor: C.holidaySoft }]}>
+              <IconCalendar color={C.holidayDark} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T w={700} size={14}>
+                {holidays.size > 0
+                  ? `${holidays.size} festivos guardados${years.length ? ` · ${years[0]}–${years.at(-1)}` : ''}`
+                  : 'Aún no hay festivos guardados'}
+              </T>
+              <T size={12.5} color={C.muted}>
+                {lastSync ? `Actualizados el ${longDate(toISO(new Date(lastSync)))}` : 'Se descargan al tener conexión.'}
+              </T>
+            </View>
+          </Row>
+          <Tap onPress={refreshing ? undefined : doRefresh} style={[st.dataBtn, { height: 46, opacity: refreshing ? 0.5 : 1 }]}>
+            <IconRefresh size={17} color={C.holidayDark} />
+            <T w={800} size={14} color={C.holidayDark}>
+              {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
+            </T>
+          </Tap>
         </View>
       </View>
 

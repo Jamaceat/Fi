@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { IconArrowDown, IconArrowUp, IconCheck, IconPending, IconTrash } from '@/components/icons';
 import { Card, Header, Row, Screen, Sheet, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listFixed, listMovements, listStatuses, markPaid, skipOccurrence, unmark, type Fixed } from '@/db/repo';
+import { listMovements, loadFixedData, markPaid, skipOccurrence, unmark, type Fixed } from '@/db/repo';
 import { periodOf, periodRange, samePeriod, shiftPeriod, type Period } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
 import { fmt, MONTHS, signed } from '@/lib/format';
@@ -27,7 +27,7 @@ type MonthAgg = {
 
 export default function Historial() {
   const db = useSQLiteContext();
-  const { currentPeriod, settings, setPeriod, bump } = useApp();
+  const { currentPeriod, settings, setPeriod, bump, holidays } = useApp();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const data = useLoad(
@@ -35,19 +35,14 @@ export default function Historial() {
       const periods = [-5, -4, -3, -2, -1, 0].map((k) => shiftPeriod(currentPeriod, k));
       const first = periodRange(periods[0], settings.monthStart);
       const last = periodRange(periods[5], settings.monthStart);
-      const [movs, fixed, statusRows] = await Promise.all([
-        listMovements(d, first.from, last.to),
-        listFixed(d),
-        listStatuses(d),
-      ]);
-      const statuses = new Map(statusRows.map((r) => [`${r.fixed_id}|${r.due_date}`, r]));
+      const [movs, fixedData] = await Promise.all([listMovements(d, first.from, last.to), loadFixedData(d)]);
 
       const months: MonthAgg[] = periods.map((p, i) => {
         const { from, to } = periodRange(p, settings.monthStart);
         const ms = movs.filter((m) => m.date >= from && m.date < to);
         const pick = (type: string, extra: number) => sum(ms.filter((m) => m.type === type && m.extraordinary === extra));
         // Los fijos sin confirmar solo cuentan en meses ya cerrados.
-        const pending = i < 5 ? fixedItems(fixed, statuses, from, to, settings.holiday).filter((x) => !x.paid) : [];
+        const pending = i < 5 ? fixedItems(fixedData, from, to, settings.holiday, holidays).filter((x) => !x.paid) : [];
         return {
           period: p,
           inc: pick('ingreso', 0),
@@ -60,8 +55,8 @@ export default function Historial() {
         };
       });
 
-      const byId = new Map<number, Fixed>(fixed.map((f) => [f.id, f]));
-      const resolved = statusRows
+      const byId = new Map<number, Fixed>(fixedData.fixed.map((f) => [f.id, f]));
+      const resolved = [...fixedData.statuses.values()]
         .filter((r) => r.resolved_at && byId.has(r.fixed_id))
         .sort((a, b) => (a.resolved_at! < b.resolved_at! ? 1 : -1))
         .slice(0, 10)
@@ -264,7 +259,7 @@ export default function Historial() {
                 <Tap
                   style={[st.pendAction, { backgroundColor: C.extra }]}
                   accessibilityLabel={`Confirmar ${p.name} en periodo extraordinario`}
-                  onPress={() => act(() => markPaid(db, p.fixed, p.occ.due, { extra: true, date: p.occ.date }))}>
+                  onPress={() => act(() => markPaid(db, p.fixed, p.occ.due, { extra: true, amount: p.amount, date: p.occ.date }))}>
                   <IconCheck size={16} color="#FFFFFF" stroke={2.4} />
                   <T w={800} size={14} color="#FFFFFF">
                     Confirmar

@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'finanzas.db';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 5;
 
 /** Se ejecuta en SQLiteProvider.onInit antes de renderizar la app. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -86,6 +86,84 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
     version = 1;
+  }
+
+  if (version === 1) {
+    await db.execAsync(`
+-- Caché de festivos (API Nager.Date). Se refresca por año según Ajustes.
+CREATE TABLE IF NOT EXISTS holidays (
+  date TEXT PRIMARY KEY NOT NULL,
+  year INTEGER NOT NULL,
+  name TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_holidays_year ON holidays(year);
+
+CREATE TABLE IF NOT EXISTS holiday_years (
+  year INTEGER PRIMARY KEY NOT NULL,
+  country TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+`);
+    version = 2;
+  }
+
+  if (version === 2) {
+    await db.execAsync(`
+-- Monto ajustado para una sola ocurrencia pendiente de un fijo (no cambia el fijo).
+CREATE TABLE IF NOT EXISTS fixed_overrides (
+  fixed_id INTEGER NOT NULL REFERENCES fixed(id) ON DELETE CASCADE,
+  due_date TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  PRIMARY KEY (fixed_id, due_date)
+);
+`);
+    version = 3;
+  }
+
+  if (version === 3) {
+    await db.execAsync(`
+-- El ajuste de una ocurrencia puede cambiar el monto, la fecha o ambos.
+CREATE TABLE fixed_overrides_v4 (
+  fixed_id INTEGER NOT NULL REFERENCES fixed(id) ON DELETE CASCADE,
+  due_date TEXT NOT NULL,
+  amount INTEGER,
+  date TEXT,
+  PRIMARY KEY (fixed_id, due_date)
+);
+INSERT INTO fixed_overrides_v4 (fixed_id, due_date, amount) SELECT fixed_id, due_date, amount FROM fixed_overrides;
+DROP TABLE fixed_overrides;
+ALTER TABLE fixed_overrides_v4 RENAME TO fixed_overrides;
+
+-- Desde qué fecha nominal aplica la configuración actual (NULL = desde start_date).
+ALTER TABLE fixed ADD COLUMN valid_from TEXT;
+
+-- Configuraciones anteriores de un fijo: aplican a las ocurrencias con fecha nominal en [valid_from, valid_to).
+CREATE TABLE IF NOT EXISTS fixed_segments (
+  id INTEGER PRIMARY KEY NOT NULL,
+  fixed_id INTEGER NOT NULL REFERENCES fixed(id) ON DELETE CASCADE,
+  valid_from TEXT NOT NULL,
+  valid_to TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  preset TEXT NOT NULL,
+  day INTEGER NOT NULL,
+  day1 INTEGER NOT NULL,
+  day2 INTEGER NOT NULL,
+  weekday INTEGER NOT NULL,
+  custom_n INTEGER NOT NULL,
+  custom_unit TEXT NOT NULL,
+  start_date TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fixed_segments_fixed ON fixed_segments(fixed_id);
+`);
+    version = 4;
+  }
+
+  if (version === 4) {
+    await db.execAsync(`
+-- Anticipado (1): se paga desde el periodo en que empieza. Vencido (0): desde el siguiente.
+ALTER TABLE fixed ADD COLUMN anticipated INTEGER NOT NULL DEFAULT 1;
+`);
+    version = 5;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

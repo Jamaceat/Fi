@@ -2,28 +2,28 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { CalendarCard } from '@/components/calendar';
 import { IconChevronLeft, IconChevronRight, IconClock, IconExpense, IconGear, IconIncome } from '@/components/icons';
 import { Card, LinkText, MovementRow, Progress, RoundButton, Row, Screen, SectionTitle, T, Tap, Toast } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listFixed, listMovements, listSavings, statusMap } from '@/db/repo';
+import { listMovements, listSavings, loadFixedData } from '@/db/repo';
 import { periodName, shiftPeriod, shortDate } from '@/lib/dates';
 import { fixedItems, sum } from '@/lib/finance';
 import { fmt, plural, signed } from '@/lib/format';
 import { useApp, useLoad } from '@/state/app';
 
 export default function Inicio() {
-  const { period, setPeriod, range, settings } = useApp();
+  const { period, setPeriod, range, settings, holidays } = useApp();
   const [revealed, setRevealed] = useState(false);
 
   const data = useLoad(
     async (db) => {
-      const [movs, fixed, statuses, savings] = await Promise.all([
+      const [movs, fixedData, savings] = await Promise.all([
         listMovements(db, range.from, range.to),
-        listFixed(db),
-        statusMap(db),
+        loadFixedData(db),
         listSavings(db),
       ]);
-      const items = fixedItems(fixed, statuses, range.from, range.to, settings.holiday);
+      const items = fixedItems(fixedData, range.from, range.to, settings.holiday, holidays);
       return { movs, items, savings };
     },
     [range.from, range.to, settings.holiday],
@@ -171,6 +171,8 @@ export default function Inicio() {
           </View>
         </Tap>
       )}
+
+      <CalendarCard />
 
       <Card style={{ padding: 18, gap: 16 }}>
         <SectionTitle right={<LinkText onPress={() => router.navigate('/fijos')}>Ver fijos</LinkText>}>Gastos</SectionTitle>

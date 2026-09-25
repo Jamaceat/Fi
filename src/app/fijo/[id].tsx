@@ -53,6 +53,7 @@ type Draft = {
   weekday: number;
   customN: number;
   customUnit: Unit;
+  anticipated: boolean;
   variable: boolean;
   autoMove: boolean;
   remind: boolean;
@@ -64,7 +65,7 @@ const wrapDay = (v: number) => (v < 1 ? 31 : v > 31 ? 1 : v);
 export default function EditarFijo() {
   const db = useSQLiteContext();
   const insets = useSafeAreaInsets();
-  const { settings, currentPeriod, bump } = useApp();
+  const { settings, currentPeriod, bump, holidays } = useApp();
   const { id, kind: kindParam } = useLocalSearchParams<{ id: string; kind?: string }>();
   const isNew = id === 'nuevo';
 
@@ -85,6 +86,7 @@ export default function EditarFijo() {
       weekday: weekdayOf(today),
       customN: def.n,
       customUnit: def.unit,
+      anticipated: true,
       variable: false,
       autoMove: true,
       remind: true,
@@ -92,6 +94,7 @@ export default function EditarFijo() {
     };
   });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [applyTo, setApplyTo] = useState<'siguientes' | 'todos'>('siguientes');
 
   useEffect(() => {
     if (isNew) return;
@@ -110,6 +113,7 @@ export default function EditarFijo() {
         weekday: f.weekday,
         customN: f.custom_n,
         customUnit: f.custom_unit,
+        anticipated: !!f.anticipated,
         variable: !!f.variable,
         autoMove: !!f.auto_move,
         remind: !!f.remind,
@@ -133,17 +137,29 @@ export default function EditarFijo() {
     weekday: d.weekday,
     custom_n: d.customN,
     custom_unit: d.customUnit,
+    anticipated: d.anticipated ? 1 : 0,
     start_date: original?.start_date ?? periodRange(currentPeriod, settings.monthStart).from,
     end_date: null,
   };
   const weekly = isWeekly(schedule);
   const py = perYear(schedule);
   const today = todayISO();
-  const upcoming = nextOccurrences(schedule, today, 3, settings.holiday);
+  const upcoming = nextOccurrences(schedule, today, 3, settings.holiday, holidays);
   const unit = UNITS.find((u) => u.id === d.customUnit)!;
   const unitWord = d.customN === 1 ? unit.one : unit.many;
   const cantSave = amount <= 0 || !d.name.trim();
   const cats = CATS[d.kind].includes(d.category) ? CATS[d.kind] : [...CATS[d.kind], d.category];
+  // Cambios que afectan fechas o montos: preguntamos si también reescriben los pagos anteriores.
+  const scheduleChanged =
+    !!original &&
+    (original.amount !== amount ||
+      original.preset !== d.preset ||
+      original.day !== d.day ||
+      original.day1 !== d.day1 ||
+      original.day2 !== d.day2 ||
+      original.weekday !== d.weekday ||
+      original.custom_n !== d.customN ||
+      original.custom_unit !== d.customUnit);
 
   const pickKind = (kind: Kind) => {
     if (kind === d.kind) return;
@@ -169,13 +185,14 @@ export default function EditarFijo() {
       weekday: d.weekday,
       custom_n: d.customN,
       custom_unit: d.customUnit,
+      anticipated: schedule.anticipated,
       variable: d.variable ? 1 : 0,
       auto_move: d.autoMove ? 1 : 0,
       remind: d.remind ? 1 : 0,
       remind_days: d.remindDays,
     };
     if (isNew) await insertFixed(db, { ...values, start_date: schedule.start_date });
-    else await updateFixed(db, Number(id), values);
+    else await updateFixed(db, Number(id), values, scheduleChanged ? applyTo : 'siguientes');
     bump();
     router.back();
   };
@@ -445,6 +462,42 @@ export default function EditarFijo() {
           </View>
         </View>
 
+        {scheduleChanged && (
+          <View style={{ gap: 10 }}>
+            <T w={800} size={16}>
+              ¿A qué pagos aplica el cambio?
+            </T>
+            <View style={st.box}>
+              {(
+                [
+                  {
+                    id: 'siguientes',
+                    name: 'Solo a los siguientes',
+                    desc: 'Los pagos anteriores conservan su fecha y monto.',
+                  },
+                  {
+                    id: 'todos',
+                    name: 'A todos, también los anteriores',
+                    desc: 'Úsalo para corregir un error al crearlo.',
+                  },
+                ] as const
+              ).map((o, i) => (
+                <Tap key={o.id} onPress={() => setApplyTo(o.id)} style={[st.presetRow, i > 0 && st.divider]}>
+                  <RadioDot on={applyTo === o.id} accent={accent} />
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <T w={applyTo === o.id ? 800 : 700} size={14.5}>
+                      {o.name}
+                    </T>
+                    <T size={12.5} color={C.muted}>
+                      {o.desc}
+                    </T>
+                  </View>
+                </Tap>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={{ gap: 10 }}>
           <T w={800} size={16}>
             Opciones
@@ -461,6 +514,26 @@ export default function EditarFijo() {
               }
               on={d.variable}
               onPress={() => set({ variable: !d.variable })}
+            />
+            <SwitchRow
+              accent={accent}
+              label={isGasto ? 'Pago anticipado' : 'Ingreso anticipado'}
+              desc={
+                d.anticipated
+                  ? isGasto
+                    ? 'Lo pagas desde este periodo.'
+                    : 'Lo recibes desde este periodo.'
+                  : isGasto
+                    ? 'Pago vencido: lo pagas desde el periodo siguiente.'
+                    : 'Ingreso vencido: lo recibes desde el periodo siguiente.'
+              }
+              help={
+                isGasto
+                  ? '• Anticipado: pagas antes de usar el servicio, como el arriendo. El primer pago es en este periodo.\n• Vencido (apagado): pagas después de usarlo, como los servicios públicos. El primer pago llega el periodo siguiente.'
+                  : '• Anticipado: te pagan al comenzar el periodo. El primer ingreso llega en este periodo.\n• Vencido (apagado): te pagan cuando el periodo termina, como un salario mes vencido. El primer ingreso llega el periodo siguiente.'
+              }
+              on={d.anticipated}
+              onPress={() => set({ anticipated: !d.anticipated })}
             />
             <SwitchRow
               accent={accent}

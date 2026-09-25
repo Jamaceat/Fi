@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F, type Weight } from '@/constants/theme';
 import { initial } from '@/lib/format';
 
-import { IconCheck, IconChevronLeft, IconClose, IconMinus, IconPlus } from './icons';
+import { IconCheck, IconChevronLeft, IconClose, IconHelp, IconMinus, IconPlus } from './icons';
 
 // ——— Texto ———
 
@@ -228,9 +228,38 @@ export function Toggle({ on, onPress, label, accent = C.in }: { on: boolean; onP
   );
 }
 
+/** Ícono (?) que muestra `text` al pasar el puntero por encima o al tocarlo. */
+export function HelpTip({ text, label }: { text: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <Tap
+        onPress={() => setOpen((v) => !v)}
+        onHoverIn={() => setOpen(true)}
+        onHoverOut={() => setOpen(false)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={`Qué significa ${label}`}
+        accessibilityHint={text}
+        accessibilityState={{ expanded: open }}>
+        <IconHelp size={16} color={open ? C.ink : C.muted} />
+      </Tap>
+      {open && (
+        <Tap onPress={() => setOpen(false)} style={s.tip} accessibilityLiveRegion="polite">
+          <View style={s.tipArrow} />
+          <T size={12.5} color="#FFFFFF" style={{ lineHeight: 18 }}>
+            {text}
+          </T>
+        </Tap>
+      )}
+    </View>
+  );
+}
+
 export function SwitchRow({
   label,
   desc,
+  help,
   on,
   onPress,
   accent,
@@ -238,17 +267,22 @@ export function SwitchRow({
 }: {
   label: string;
   desc: string;
+  /** Explicación larga detrás de un ícono (?). */
+  help?: string;
   on: boolean;
   onPress: () => void;
   accent?: string;
   first?: boolean;
 }) {
   return (
-    <Row gap={12} style={[s.listRow, !first && s.divider]}>
+    <Row gap={12} style={[s.listRow, !first && s.divider, help && { zIndex: 1 }]}>
       <View style={{ flex: 1, gap: 2 }}>
-        <T w={700} size={14.5}>
-          {label}
-        </T>
+        <Row gap={6}>
+          <T w={700} size={14.5}>
+            {label}
+          </T>
+          {help && <HelpTip text={help} label={label} />}
+        </Row>
         <T size={12.5} color={C.muted}>
           {desc}
         </T>
@@ -500,6 +534,31 @@ export const s = StyleSheet.create({
   track: { width: 50, height: 30, borderRadius: 15, padding: 3, flexDirection: 'row', alignItems: 'center' },
   knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
   listRow: { paddingVertical: 12, minHeight: 56 },
+  tip: {
+    position: 'absolute',
+    top: 26,
+    left: -12,
+    width: 260,
+    backgroundColor: C.ink,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    zIndex: 10,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  tipArrow: {
+    position: 'absolute',
+    top: -5,
+    left: 15,
+    width: 10,
+    height: 10,
+    backgroundColor: C.ink,
+    transform: [{ rotate: '45deg' }],
+  },
   divider: { borderTopWidth: 1, borderTopColor: C.divider },
   stepper: { backgroundColor: C.chip, borderRadius: 14, padding: 4 },
   stepBtn: {
