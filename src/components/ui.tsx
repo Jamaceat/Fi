@@ -15,6 +15,7 @@ import {
   type ViewProps,
   type ViewStyle,
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, type Weight } from '@/constants/theme';
@@ -22,7 +23,7 @@ import { t } from '@/i18n';
 import { initial } from '@/lib/format';
 import { layout } from '@/styles/common';
 
-import { IconCheck, IconChevronLeft, IconClose, IconHelp } from './icons';
+import { IconCheck, IconChevronLeft, IconClose, IconInfo } from './icons';
 import { styles as s } from './ui.styles';
 
 // ——— Texto ———
@@ -298,31 +299,72 @@ export function Toggle({
   );
 }
 
-/** Ícono (?) que muestra `text` al pasar el puntero por encima o al tocarlo. */
-export function HelpTip({ text, label }: { text: string; label: string }) {
+/** Ícono (i) que abre o cierra la explicación de un campo. */
+function InfoButton({ open, onPress, label, help }: { open: boolean; onPress: () => void; label: string; help: string }) {
+  return (
+    <Tap
+      onPress={onPress}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel={t('ui.helpLabel', { label })}
+      accessibilityHint={help}
+      accessibilityState={{ expanded: open }}>
+      <IconInfo size={16} color={open ? C.ink : C.muted} />
+    </Tap>
+  );
+}
+
+/** Explicación desplegada debajo de la etiqueta; se cierra al tocarla. */
+function InfoNote({ text, onClose }: { text: string; onClose: () => void }) {
+  return (
+    <Animated.View entering={FadeIn.duration(180)}>
+      <Tap onPress={onClose} style={s.info} accessibilityLiveRegion="polite">
+        <T size={12.5} color={C.muted2} style={s.infoText}>
+          {text}
+        </T>
+      </Tap>
+    </Animated.View>
+  );
+}
+
+/**
+ * Etiqueta de un campo. Con `help` muestra un ícono (i) al lado que despliega debajo
+ * para qué sirve el campo y cómo llenarlo.
+ */
+export function Label({
+  text,
+  help,
+  optional,
+  w = 800,
+  size = 14,
+  color,
+  style,
+}: {
+  text: string;
+  help?: string;
+  optional?: boolean;
+  w?: Weight;
+  size?: number;
+  color?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
   const [open, setOpen] = useState(false);
   return (
-    <View>
-      <Tap
-        onPress={() => setOpen((v) => !v)}
-        onHoverIn={() => setOpen(true)}
-        onHoverOut={() => setOpen(false)}
-        hitSlop={10}
-        accessibilityRole="button"
-        accessibilityLabel={t('ui.helpLabel', { label })}
-        accessibilityHint={text}
-        accessibilityState={{ expanded: open }}>
-        <IconHelp size={16} color={open ? C.ink : C.muted} />
-      </Tap>
-      {open && (
-        <Tap onPress={() => setOpen(false)} style={s.tip} accessibilityLiveRegion="polite">
-          <View style={s.tipArrow} />
-          <T size={12.5} color={C.white} style={s.tipText}>
-            {text}
-          </T>
-        </Tap>
-      )}
-    </View>
+    <Stack gap={8} style={style}>
+      <Row gap={6}>
+        <T w={w} size={size} color={color} style={layout.shrink}>
+          {text}
+          {optional && (
+            <T w={500} size={size} color={C.muted}>
+              {' '}
+              {t('common.optional')}
+            </T>
+          )}
+        </T>
+        {help && <InfoButton open={open} onPress={() => setOpen((v) => !v)} label={text} help={help} />}
+      </Row>
+      {open && help && <InfoNote text={help} onClose={() => setOpen(false)} />}
+    </Stack>
   );
 }
 
@@ -338,7 +380,7 @@ export function SwitchRow({
 }: {
   label: string;
   desc: string;
-  /** Explicación larga detrás de un ícono (?). */
+  /** Explicación larga detrás de un ícono (i). */
   help?: string;
   on: boolean;
   onPress: () => void;
@@ -346,18 +388,24 @@ export function SwitchRow({
   first?: boolean;
   disabled?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Row gap={12} style={[s.listRow, !first && s.divider, help && s.listRowRaised]}>
+    <Row gap={12} style={[s.listRow, !first && s.divider]}>
       <Stack gap={2} style={layout.fill}>
         <Row gap={6}>
-          <T w={700} size={14.5}>
+          <T w={700} size={14.5} style={layout.shrink}>
             {label}
           </T>
-          {help && <HelpTip text={help} label={label} />}
+          {help && <InfoButton open={open} onPress={() => setOpen((v) => !v)} label={label} help={help} />}
         </Row>
         <T size={12.5} color={C.muted}>
           {desc}
         </T>
+        {open && help && (
+          <View style={s.infoGap}>
+            <InfoNote text={help} onClose={() => setOpen(false)} />
+          </View>
+        )}
       </Stack>
       <Toggle on={on} onPress={onPress} label={label} accent={accent} disabled={disabled} />
     </Row>

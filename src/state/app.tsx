@@ -1,8 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { AppState as RNAppState } from 'react-native';
 
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/db/repo';
+import { backupIfDue, deleteBackup, importBackup, lastBackupAt, writeBackup, type Backup } from '@/lib/backup';
 import { periodOf, periodRange, todayISO, type Period } from '@/lib/dates';
 import { loadHolidays, syncHolidays, type HolidayMap } from '@/lib/holidays';
 
@@ -25,6 +27,14 @@ type AppState = {
   needHolidays: (years: number[]) => void;
   /** Vuelve a descargar todos los años conocidos ignorando la caché. */
   refreshHolidays: () => Promise<{ updated: number; failed: number }>;
+  /** Fecha ISO del último respaldo automático, o null si no hay. */
+  lastBackup: string | null;
+  /** Respalda ya, sin esperar la frecuencia. */
+  backupNow: () => Promise<string>;
+  /** Elimina el respaldo (al borrar todos los datos). */
+  removeBackup: () => void;
+  /** Reemplaza todos los datos y ajustes por los de un respaldo importado. */
+  loadBackup: (backup: Backup) => Promise<void>;
 };
 
 type HolidayState = { map: HolidayMap; fetched: ReadonlyMap<number, string> };
@@ -45,6 +55,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [hol, setHol] = useState<HolidayState | null>(null);
   // Años ya pedidos en esta sesión, para no repetir la consulta en cada render.
   const asked = useRef(new Set<number>());
+  // undefined = aún no se ha leído el archivo de respaldo.
+  const [lastBackup, setLastBackup] = useState<string | null | undefined>(undefined);
+  const lastBackupRef = useRef<string | null>(null);
+  const backingUp = useRef(false);
 
   const reloadHolidays = useCallback(async () => {
     setHol(await loadHolidays(db));
@@ -65,10 +79,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    Promise.all([getSettings(db), loadHolidays(db).catch(() => EMPTY_HOLIDAYS)]).then(([s, h]) => {
+    Promise.all([
+      getSettings(db),
+      loadHolidays(db).catch(() => EMPTY_HOLIDAYS),
+      lastBackupAt().catch(() => null),
+    ]).then(([s, h, b]) => {
       setSettings(s);
       setPeriod(periodOf(todayISO(), s.monthStart));
       setHol(h);
+      lastBackupRef.current = b;
+      setLastBackup(b);
       // Con la caché ya cargada se refresca en segundo plano lo que haga falta.
       sync(aroundToday(), s.holidayCacheDays).catch(() => {});
     });
@@ -101,7 +121,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  if (!settings || !period || !hol) return null;
+  const savedBackup = (at: string) => {
+    lastBackupRef.current = at;
+    setLastBackup(at);
+    return at;
+  };
+
+  const backupDays = settings?.backupDays;
+  const backupLoaded = lastBackup !== undefined;
+
+  // Se revisa al abrir, tras cada cambio de datos y al entrar o salir de la app; solo escribe si ya toca.
+  useEffect(() => {
+    if (backupDays == null || !backupLoaded) return;
+    const check = () => {
+      if (backingUp.current) return;
+      backingUp.current = true;
+      backupIfDue(db, lastBackupRef.current, backupDays)
+        .then((at) => at && savedBackup(at))
+        .catch(() => {})
+        .finally(() => {
+          backingUp.current = false;
+        });
+    };
+    check();
+    const sub = RNAppState.addEventListener('change', (state) => {
+      if (state === 'active' || state === 'background') check();
+    });
+    return () => sub.remove();
+  }, [db, version, backupDays, backupLoaded]);
+
+  const backupNow = async () => savedBackup(await writeBackup(db));
+
+  const removeBackup = () => {
+    deleteBackup();
+    lastBackupRef.current = null;
+    setLastBackup(null);
+  };
+
+  const loadBackup = async (backup: Backup) => {
+    await importBackup(db, backup);
+    const s = await getSettings(db);
+    setSettings(s);
+    setPeriod(periodOf(todayISO(), s.monthStart));
+    savedBackup(backup.createdAt);
+    setVersion((v) => v + 1);
+  };
+
+  if (!settings || !period || !hol || lastBackup === undefined) return null;
 
   const value: AppState = {
     settings,
@@ -116,6 +182,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     holidayYears: hol.fetched,
     needHolidays,
     refreshHolidays,
+    lastBackup,
+    backupNow,
+    removeBackup,
+    loadBackup,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

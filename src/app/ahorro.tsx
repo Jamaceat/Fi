@@ -9,6 +9,7 @@ import {
   Card,
   Field,
   Header,
+  Label,
   PrimaryButton,
   Progress,
   Row,
@@ -330,9 +331,7 @@ export default function Ahorro() {
 
         {sheet === 'newGoal' && (
           <Stack gap={6}>
-            <T w={800} size={14}>
-              {t('savings.sheet.goalName')}
-            </T>
+            <Label text={t('savings.sheet.goalName')} help={t('savings.help.goalName')} />
             <Field
               value={nameInput}
               onChangeText={(text) => setNameInput(text.slice(0, 40))}
@@ -342,9 +341,7 @@ export default function Ahorro() {
         )}
 
         <Stack gap={6}>
-          <T w={800} size={14}>
-            {sheet ? t(`savings.sheet.input.${sheet}`) : ''}
-          </T>
+          {sheet && <Label key={sheet} text={t(`savings.sheet.input.${sheet}`)} help={t(`savings.help.input.${sheet}`)} />}
           <View style={common.amountBox}>
             <AmountField size={40} value={dots(input)} onChangeText={(text) => setInput(cleanAmount(text))} color={C.inDark} />
           </View>

@@ -7,17 +7,20 @@ import {
   IconCalendar,
   IconChevronDown,
   IconChevronRight,
+  IconClock,
   IconDownload,
   IconLayout,
   IconRefresh,
   IconTrash,
+  IconUpload,
 } from '@/components/icons';
-import { Field, Header, RadioDot, Row, Screen, Stack, Stepper, SwitchRow, T, Tap, Toast } from '@/components/ui';
+import { Field, Header, Label, RadioDot, Row, Screen, Stack, Stepper, SwitchRow, T, Tap, Toast } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
 import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
 import { longDate, toISO } from '@/lib/dates';
+import { pickBackup, shareBackup, type Backup } from '@/lib/backup';
 import { exportCsv } from '@/lib/export';
 import { describePreset, presetName, PRESETS, unitLabel, UNITS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
@@ -25,6 +28,8 @@ import { common, layout } from '@/styles/common';
 import { styles as st } from '@/styles/screens/ajustes.styles';
 
 const CACHE_DAYS = [7, 30, 90, 180, 365] as const;
+
+const BACKUP_DAYS = [1, 3, 7, 15, 30] as const;
 
 const PRESET_OPTS: Preset[] = [...PRESETS.map((p) => p.id), 'custom'];
 
@@ -43,8 +48,20 @@ type ToastState = { title: string; text: string; warn?: boolean };
 
 export default function Ajustes() {
   const db = useSQLiteContext();
-  const { settings: s, updateSettings, bump, holidays, holidayYears, refreshHolidays } = useApp();
+  const {
+    settings: s,
+    updateSettings,
+    bump,
+    holidays,
+    holidayYears,
+    refreshHolidays,
+    lastBackup,
+    backupNow,
+    removeBackup,
+    loadBackup,
+  } = useApp();
   const [refreshing, setRefreshing] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const [open, setOpen] = useState<Kind | null>(null);
   const [wiping, setWiping] = useState(false);
   const [wipeText, setWipeText] = useState('');
@@ -88,6 +105,59 @@ export default function Ajustes() {
     }
   };
 
+  const doBackup = async () => {
+    setBackingUp(true);
+    try {
+      await backupNow();
+      setToast({ title: t('settings.backup.saved'), text: t('settings.backup.savedText') });
+    } catch (e) {
+      setToast({ warn: true, title: t('settings.backup.failed'), text: String(e) });
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const doExportBackup = async () => {
+    try {
+      await backupNow();
+      const name = await shareBackup();
+      setToast({ title: t('settings.backup.exported'), text: t('settings.backup.exportedText', { name }) });
+    } catch (e) {
+      setToast({ warn: true, title: t('settings.backup.exportFailed'), text: String(e) });
+    }
+  };
+
+  const applyImport = async (backup: Backup) => {
+    try {
+      await loadBackup(backup);
+      setToast({ title: t('settings.backup.imported'), text: t('settings.backup.importedText') });
+    } catch (e) {
+      setToast({ warn: true, title: t('settings.backup.importFailed'), text: String(e) });
+    }
+  };
+
+  const doImport = async () => {
+    let backup: Backup | null;
+    try {
+      backup = await pickBackup();
+    } catch (e) {
+      setToast({ warn: true, title: t('settings.backup.importFailed'), text: e instanceof Error ? e.message : String(e) });
+      return;
+    }
+    if (!backup) return;
+    const created = backup.createdAt ? new Date(backup.createdAt) : null;
+    Alert.alert(
+      t('settings.backup.importConfirmTitle'),
+      created && !isNaN(created.getTime())
+        ? t('settings.backup.importConfirmText', { date: longDate(toISO(created)) })
+        : t('settings.backup.importConfirmTextNoDate'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('settings.backup.importConfirm'), style: 'destructive', onPress: () => applyImport(backup) },
+      ],
+    );
+  };
+
   const wipeWord = t('settings.data.wipeWord');
   const cantWipe = wipeText.trim().toUpperCase() !== wipeWord;
   const closeWipe = () => {
@@ -97,6 +167,8 @@ export default function Ajustes() {
   const doWipe = async () => {
     if (cantWipe) return;
     await wipeData(db);
+    // Sin respaldo, la próxima apertura con la base vacía se toma como un inicio desde cero.
+    removeBackup();
     bump();
     closeWipe();
     setToast({ warn: true, title: t('settings.data.wiped'), text: t('settings.data.wipedText') });
@@ -117,9 +189,7 @@ export default function Ajustes() {
 
       <Stack gap={10}>
         <Stack gap={4}>
-          <T w={800} size={16}>
-            {t('settings.defaults.title')}
-          </T>
+          <Label text={t('settings.defaults.title')} help={t('settings.help.defaults')} size={16} />
           <T size={12.5} color={C.muted}>
             {t('settings.defaults.text')}
           </T>
@@ -212,9 +282,7 @@ export default function Ajustes() {
         <View style={[common.box, common.boxPadded]}>
           <Row gap={12} style={st.settingRow}>
             <Stack gap={2} style={layout.fill}>
-              <T w={700} size={14.5}>
-                {t('settings.month.start')}
-              </T>
+              <Label text={t('settings.month.start')} help={t('settings.help.monthStart')} w={700} size={14.5} />
               <T size={12.5} color={C.muted}>
                 {t('settings.month.startText')}
               </T>
@@ -228,9 +296,7 @@ export default function Ajustes() {
             />
           </Row>
           <View style={[common.divider, st.radioGroup]}>
-            <T w={700} size={14.5}>
-              {t('settings.month.holidayRule')}
-            </T>
+            <Label text={t('settings.month.holidayRule')} help={t('settings.help.holidayRule')} w={700} size={14.5} />
             {HOLIDAY_RULES.map((id) => (
               <RadioOption
                 key={id}
@@ -253,9 +319,7 @@ export default function Ajustes() {
           </T>
         </Stack>
         <View style={[common.box, st.holidayBox]}>
-          <T w={700} size={14.5}>
-            {t('settings.holidays.cacheFor')}
-          </T>
+          <Label text={t('settings.holidays.cacheFor')} help={t('settings.help.cacheFor')} w={700} size={14.5} />
           <View style={st.optGrid}>
             {CACHE_DAYS.map((days) => {
               const sel = s.holidayCacheDays === days;
@@ -306,20 +370,26 @@ export default function Ajustes() {
             first
             label={t('settings.alerts.remindFixed')}
             desc={t('settings.alerts.remindFixedText')}
+            help={t('settings.help.remindFixed')}
             on={s.remindFijos}
             onPress={() => toggle('remindFijos')}
           />
           <SwitchRow
             label={t('settings.alerts.budget')}
             desc={t('settings.alerts.budgetText')}
+            help={t('settings.help.budget')}
             on={s.budgetAlert}
             onPress={() => toggle('budgetAlert')}
           />
           {s.budgetAlert && (
             <Row style={[common.divider, st.settingRowCompact]}>
-              <T w={700} size={14.5} style={layout.fill}>
-                {t('settings.alerts.budgetAt')}
-              </T>
+              <Label
+                text={t('settings.alerts.budgetAt')}
+                help={t('settings.help.budgetAt')}
+                w={700}
+                size={14.5}
+                style={layout.fill}
+              />
               <Stepper
                 minWidth={56}
                 value={t('settings.alerts.percent', { pct: s.budget })}
@@ -333,13 +403,12 @@ export default function Ajustes() {
           <SwitchRow
             label={t('settings.alerts.weekly')}
             desc={t('settings.alerts.weeklyText')}
+            help={t('settings.help.weekly')}
             on={s.weekly}
             onPress={() => toggle('weekly')}
           />
           <View style={[common.divider, st.radioGroup]}>
-            <T w={700} size={14.5}>
-              {t('settings.alerts.hour')}
-            </T>
+            <Label text={t('settings.alerts.hour')} help={t('settings.help.hour')} w={700} size={14.5} />
             <Row gap={8}>
               {HOURS.map(([id, key]) => {
                 const sel = s.hour === id;
@@ -370,10 +439,17 @@ export default function Ajustes() {
             first
             label={t('settings.privacy.hideAmounts')}
             desc={t('settings.privacy.hideAmountsText')}
+            help={t('settings.help.hideAmounts')}
             on={s.hideAmounts}
             onPress={() => toggle('hideAmounts')}
           />
-          <SwitchRow label={t('settings.privacy.lock')} desc={t('settings.privacy.lockText')} on={s.lock} onPress={toggleLock} />
+          <SwitchRow
+            label={t('settings.privacy.lock')}
+            desc={t('settings.privacy.lockText')}
+            help={t('settings.help.lock')}
+            on={s.lock}
+            onPress={toggleLock}
+          />
           <Row gap={12} style={[common.divider, st.settingRow]}>
             <Stack gap={2} style={layout.fill}>
               <T w={700} size={14.5}>
@@ -408,6 +484,72 @@ export default function Ajustes() {
           </Stack>
           <IconChevronRight size={16} color={C.faint} />
         </Tap>
+      </Stack>
+
+      <Stack gap={10}>
+        <Stack gap={4}>
+          <T w={800} size={16}>
+            {t('settings.backup.title')}
+          </T>
+          <T size={12.5} color={C.muted}>
+            {t('settings.backup.text')}
+          </T>
+        </Stack>
+        <View style={[common.box, st.backupBox]}>
+          <Label text={t('settings.backup.every')} help={t('settings.help.backupEvery')} w={700} size={14.5} />
+          <View style={st.optGrid}>
+            {BACKUP_DAYS.map((days) => {
+              const sel = s.backupDays === days;
+              return (
+                <Tap
+                  key={days}
+                  onPress={() => updateSettings({ backupDays: days })}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: sel }}
+                  style={[st.opt, { backgroundColor: sel ? C.in : C.card, borderColor: sel ? C.in : C.line }]}>
+                  <T w={700} size={13} color={sel ? C.white : C.ink}>
+                    {t(`settings.backup.options.d${days}`)}
+                  </T>
+                </Tap>
+              );
+            })}
+          </View>
+          <Row gap={12} style={[common.divider, st.backupStatus]}>
+            <View style={[st.defIcon, st.defIconIn]}>
+              <IconClock size={18} color={C.inDark} />
+            </View>
+            <Stack gap={2} style={layout.fill}>
+              <T w={700} size={14}>
+                {lastBackup
+                  ? t('settings.backup.last', { date: longDate(toISO(new Date(lastBackup))) })
+                  : t('settings.backup.none')}
+              </T>
+              <T size={12.5} color={C.muted}>
+                {lastBackup ? t('settings.backup.nextText') : t('settings.backup.noneText')}
+              </T>
+            </Stack>
+          </Row>
+          <Tap onPress={backingUp ? undefined : doBackup} style={[common.outlineBtn, st.refreshBtn, backingUp && st.refreshing]}>
+            <IconRefresh size={17} color={C.inDark} />
+            <T w={800} size={14} color={C.inDark}>
+              {backingUp ? t('settings.backup.saving') : t('settings.backup.now')}
+            </T>
+          </Tap>
+          <Row gap={8}>
+            <Tap onPress={doExportBackup} style={[common.outlineBtn, st.refreshBtn, layout.fill]}>
+              <IconDownload size={17} />
+              <T w={800} size={14}>
+                {t('settings.backup.export')}
+              </T>
+            </Tap>
+            <Tap onPress={doImport} style={[common.outlineBtn, st.refreshBtn, layout.fill]}>
+              <IconUpload size={17} />
+              <T w={800} size={14}>
+                {t('settings.backup.import')}
+              </T>
+            </Tap>
+          </Row>
+        </View>
       </Stack>
 
       <Stack gap={10}>

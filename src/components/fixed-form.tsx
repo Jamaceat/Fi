@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
-import { Field, RadioDot, Row, Stack, Stepper, SwitchRow, T, Tap, useScrollIntoView } from '@/components/ui';
+import { Field, Label, RadioDot, Row, Stack, Stepper, SwitchRow, T, Tap, useScrollIntoView } from '@/components/ui';
 import { C } from '@/constants/theme';
 import type { Fixed } from '@/db/repo';
 import { t, tList } from '@/i18n';
@@ -255,6 +255,8 @@ export function FixedForm({
       ? t('fixedForm.day.twoDaysQuestion')
       : t(`fixedForm.day.question.${kind}`);
 
+  const dayHelp = t(`fixedForm.help.day.${weekly ? 'weekday' : isQuincenal ? 'twoDays' : 'month'}`);
+
   const anticipatedDesc = lockAnticipated
     ? t(`fixedForm.options.anticipatedLocked.${kind}`)
     : d.anticipated
@@ -291,9 +293,7 @@ export function FixedForm({
   // Se despliega debajo de la periodicidad elegida para no tener que bajar a buscarlo.
   const dayPicker = (
     <Animated.View key={`${d.preset}-${weekly}`} entering={FadeInDown.duration(SLIDE_MS)} style={st.dayPanel}>
-      <T w={800} size={13.5}>
-        {dayQuestion}
-      </T>
+      <Label text={dayQuestion} help={dayHelp} size={13.5} />
       {weekly ? (
         <Row gap={6}>
           {weekdayInitials().map((l, i) => {
@@ -367,15 +367,15 @@ export function FixedForm({
       {show('info') && (
         <Stack gap={12}>
           <Stack gap={6}>
-            <T w={800} size={14}>
-              {t('fixedForm.name')}
-              {nameOptional && (
-                <T w={500} size={14} color={C.muted}>
-                  {' '}
-                  {t('common.optional')}
-                </T>
-              )}
-            </T>
+            <Label
+              text={t('fixedForm.name')}
+              optional={nameOptional}
+              help={
+                nameOptional
+                  ? `${t(`fixedForm.help.name.${kind}`)} ${t('fixedForm.help.nameOptional')}`
+                  : t(`fixedForm.help.name.${kind}`)
+              }
+            />
             <Field
               value={d.name}
               onChangeText={(text) => set({ name: text.slice(0, 40) })}
@@ -383,28 +383,32 @@ export function FixedForm({
             />
           </Stack>
           {!hideCategory && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.catList}>
-              {cats.map((c) => {
-                const on = c === d.category;
-                return (
-                  <Tap
-                    key={c}
-                    onPress={() => set({ category: c })}
-                    accessibilityState={{ selected: on }}
-                    style={[st.catChip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
-                    <T w={700} size={13} color={on ? C.white : C.ink}>
-                      {c}
-                    </T>
-                  </Tap>
-                );
-              })}
-            </ScrollView>
+            <Stack gap={6}>
+              <Label text={t('fixedForm.category')} help={t('fixedForm.help.category')} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.catList}>
+                {cats.map((c) => {
+                  const on = c === d.category;
+                  return (
+                    <Tap
+                      key={c}
+                      onPress={() => set({ category: c })}
+                      accessibilityState={{ selected: on }}
+                      style={[st.catChip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
+                      <T w={700} size={13} color={on ? C.white : C.ink}>
+                        {c}
+                      </T>
+                    </Tap>
+                  );
+                })}
+              </ScrollView>
+            </Stack>
           )}
           {!hideAmount && (
             <Stack gap={6}>
-              <T w={800} size={14}>
-                {d.variable ? t('fixedForm.amountApprox') : t(`fixedForm.amountEach.${kind}`)}
-              </T>
+              <Label
+                text={d.variable ? t('fixedForm.amountApprox') : t(`fixedForm.amountEach.${kind}`)}
+                help={t(`fixedForm.help.amount.${kind}`)}
+              />
               <Row gap={6} style={st.amountRow}>
                 <T serif size={22}>
                   $
@@ -425,9 +429,7 @@ export function FixedForm({
 
       {show('frequency') && (
         <Stack gap={10}>
-          <T w={800} size={16}>
-            {t(`fixedForm.frequencyQuestion.${kind}`)}
-          </T>
+          <Label text={t(`fixedForm.frequencyQuestion.${kind}`)} help={t('fixedForm.help.frequency')} size={16} />
           <Animated.View layout={SLIDE} style={common.box}>
             {PRESETS.map((p, i) => {
               const sel = p.id === d.preset;
@@ -461,9 +463,7 @@ export function FixedForm({
             <Tap onPress={() => set({ preset: 'custom' })} style={st.customHead}>
               <RadioDot on={isCustom} accent={accent} />
               <Stack gap={1} style={layout.fill}>
-                <T w={800} size={14.5}>
-                  {presetName('custom')}
-                </T>
+                <Label text={presetName('custom')} help={t('fixedForm.help.custom')} size={14.5} />
                 <T size={12.5} color={C.muted}>
                   {presetDesc('custom')}
                 </T>
@@ -507,9 +507,7 @@ export function FixedForm({
 
       {show('upcoming') && (
         <Stack gap={10}>
-          <T w={800} size={16}>
-            {t(`fixedForm.upcoming.${kind}`)}
-          </T>
+          <Label text={t(`fixedForm.upcoming.${kind}`)} help={t('fixedForm.help.upcoming')} size={16} />
           <View style={[st.upcoming, isGasto ? st.upcomingOut : st.upcomingIn]}>
             {upcoming.map((o, i) => {
               const dd = fromISO(o.date);
@@ -545,9 +543,7 @@ export function FixedForm({
 
       {show('applyTo') && scheduleChanged(original, d) && onApplyTo && (
         <Stack gap={10}>
-          <T w={800} size={16}>
-            {t('fixedForm.applyTo.title')}
-          </T>
+          <Label text={t('fixedForm.applyTo.title')} help={t('fixedForm.help.applyTo')} size={16} />
           <View style={common.box}>
             {APPLY_OPTIONS.map((id, i) => (
               <Tap key={id} onPress={() => onApplyTo(id)} style={[st.presetRow, i > 0 && common.divider]}>
@@ -577,6 +573,7 @@ export function FixedForm({
               accent={accent}
               label={t('fixedForm.options.variable')}
               desc={t(`fixedForm.options.variableDesc.${kind}`)}
+              help={t(`fixedForm.help.variable.${kind}`)}
               on={d.variable}
               onPress={() => set({ variable: !d.variable })}
             />
@@ -593,6 +590,7 @@ export function FixedForm({
               accent={accent}
               label={t(`fixedForm.options.autoMove.${kind}`)}
               desc={t('fixedForm.options.autoMoveDesc')}
+              help={t(`fixedForm.help.autoMove.${kind}`)}
               on={d.autoMove}
               onPress={() => set({ autoMove: !d.autoMove })}
             />
@@ -600,14 +598,19 @@ export function FixedForm({
               accent={accent}
               label={t('fixedForm.options.remind')}
               desc={t(`fixedForm.options.remindDesc.${kind}`)}
+              help={t(`fixedForm.help.remind.${kind}`)}
               on={d.remind}
               onPress={() => set({ remind: !d.remind })}
             />
             {d.remind && (
               <Row style={[st.stepRow, common.divider]}>
-                <T w={700} size={14.5} style={layout.fill}>
-                  {t('fixedForm.remind.label')}
-                </T>
+                <Label
+                  text={t('fixedForm.remind.label')}
+                  help={t('fixedForm.help.remindDays')}
+                  w={700}
+                  size={14.5}
+                  style={layout.fill}
+                />
                 <Stepper
                   minWidth={96}
                   value={remindLabel(d.remindDays)}

@@ -83,6 +83,8 @@ export type Settings = {
   holiday: HolidayRule;
   /** Días que se reutilizan los festivos descargados antes de volver a pedirlos. */
   holidayCacheDays: number;
+  /** Cada cuántos días se respaldan los datos automáticamente. */
+  backupDays: number;
   remindFijos: boolean;
   budgetAlert: boolean;
   budget: number;
@@ -102,6 +104,7 @@ export const DEFAULT_SETTINGS: Settings = {
   monthStart: 1,
   holiday: 'antes',
   holidayCacheDays: 30,
+  backupDays: 1,
   remindFijos: true,
   budgetAlert: true,
   budget: 80,
@@ -402,7 +405,7 @@ export const deleteGoal = (db: SQLiteDatabase, id: number) => db.runAsync('DELET
 
 // ——— Datos ———
 
-/** Borra todo menos los ajustes. */
+/** Borra todo menos los ajustes. El respaldo automático se elimina aparte (lib/backup). */
 export const wipeData = (db: SQLiteDatabase) =>
   db.execAsync(`
 DELETE FROM fixed_status;

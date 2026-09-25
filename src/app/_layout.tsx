@@ -9,10 +9,10 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { PrimaryButton, T } from '@/components/ui';
@@ -20,10 +20,25 @@ import { C } from '@/constants/theme';
 import { DB_NAME, migrateDbIfNeeded } from '@/db/schema';
 import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
+import { restoreBackupIfEmpty } from '@/lib/backup';
+import { longDate, toISO } from '@/lib/dates';
 import { AppProvider, useApp } from '@/state/app';
 import { styles as st } from '@/styles/screens/root-layout.styles';
 
 SplashScreen.preventAutoHideAsync();
+
+/** Migra la base y, si está vacía, la recupera del respaldo automático (si existe). */
+async function initDb(db: SQLiteDatabase) {
+  await migrateDbIfNeeded(db);
+  try {
+    const restored = await restoreBackupIfEmpty(db);
+    if (restored) {
+      Alert.alert(t('backup.restoredTitle'), t('backup.restoredText', { date: longDate(toISO(new Date(restored))) }));
+    }
+  } catch (e) {
+    Alert.alert(t('backup.restoreFailedTitle'), String(e));
+  }
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -44,7 +59,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={st.root}>
-      <SQLiteProvider databaseName={DB_NAME} onInit={migrateDbIfNeeded}>
+      <SQLiteProvider databaseName={DB_NAME} onInit={initDb}>
         <AppProvider>
           <StatusBar style="dark" />
           <LockGate>

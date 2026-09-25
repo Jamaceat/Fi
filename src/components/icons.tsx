@@ -46,6 +46,7 @@ export const IconBars = make(['M5 20v-9M12 20V5M19 20v-7'], 1.9);
 export const IconRefresh = make(['M20 11a8 8 0 0 0-14.6-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5L20 16M20 20v-4h-4']);
 export const IconTrash = make(['M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3'], 1.9);
 export const IconDownload = make(['M12 4v11M7 10l5 5 5-5M5 20h14'], 1.9);
+export const IconUpload = make(['M12 15V4M7 9l5-5 5 5M5 20h14'], 1.9);
 export const IconExpand = make(['M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5'], 2);
 export const IconCollapse = make(['M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5'], 2);
 export const IconGrip = make(['M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01'], 3.2);
@@ -83,14 +84,14 @@ export const IconSearch = ({ size = 18, color = C.ink, stroke = 2 }: P) => (
   </Svg>
 );
 
-export const IconHelp = ({ size = 16, color = C.ink, stroke = 2 }: P) => (
+export const IconInfo = ({ size = 16, color = C.ink, stroke = 2 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={9} />
-    <Path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.8M12 17.2h.01" />
+    <Path d="M12 11v5.5M12 7.8h.01" />
   </Svg>
 );
 
-export const IconTarget = ({ size = 20, color = C.ink, stroke = 1.9 }: P) => (
+export const IconTarget =({ size = 20, color = C.ink, stroke = 1.9 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={8.5} />
     <Circle cx={12} cy={12} r={4.5} />

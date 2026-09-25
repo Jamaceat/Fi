@@ -422,6 +422,50 @@ export const es = {
       decrease: 'Menos días de anticipación',
       increase: 'Más días de anticipación',
     },
+    category: 'Categoría',
+    help: {
+      name: {
+        gasto: 'Cómo lo vas a reconocer en tus listas y avisos, por ejemplo "Arriendo" o "Gimnasio". Máximo 40 caracteres.',
+        ingreso: 'Cómo lo vas a reconocer en tus listas y avisos, por ejemplo "Salario" o "Arriendo cobrado". Máximo 40 caracteres.',
+      },
+      nameOptional: 'Si lo dejas vacío, se usa el nombre de la categoría.',
+      category: 'Agrupa este fijo para ver en qué se va o de dónde viene tu dinero. Desliza hacia los lados para ver todas las opciones y toca una para elegirla.',
+      amount: {
+        gasto: 'Lo que pagas cada vez que se repite, no el total del mes. Si el valor cambia cada vez, escribe un aproximado y activa "Monto variable" en Opciones.',
+        ingreso: 'Lo que recibes cada vez que se repite, no el total del mes. Si el valor cambia cada vez, escribe un aproximado y activa "Monto variable" en Opciones.',
+      },
+      frequency:
+        'Cada cuánto se repite. Toca una opción y debajo aparece el día en que cae. La etiqueta "Por defecto" marca la que configuraste en Ajustes.',
+      custom:
+        'Para lo que no encaja en las opciones de arriba, como cada 10 días o cada 4 meses. Usa − y + para el número, elige la unidad y toca el recuadro para usarla.',
+      day: {
+        weekday: 'El día de la semana en que se repite. Toca la inicial del día.',
+        twoDays: 'Los dos días del mes en que se repite, por ejemplo 15 y 30. Usa − y + o toca el número para escribirlo.',
+        month:
+          'El día del mes en que se repite. Usa − y + o toca el número para escribirlo. Si cae en fin de semana o festivo, la fecha se mueve según la regla que elegiste en Ajustes.',
+      },
+      upcoming:
+        'Vista previa de las próximas fechas con lo que configuraste, ya ajustadas por fines de semana y festivos. Revisa que coincidan con las fechas reales.',
+      applyTo:
+        'Cambiaste el monto o las fechas. Elige si el cambio cuenta solo de aquí en adelante o si también corrige los pagos que ya están registrados.',
+      variable: {
+        gasto:
+          'Actívalo si el valor no es igual cada vez, como el agua o la luz. Mientras tanto se usa el monto aproximado y, al marcarlo como pagado, te pediremos el valor real.',
+        ingreso:
+          'Actívalo si el valor no es igual cada vez, como comisiones u horas extra. Mientras tanto se usa el monto aproximado y, al marcarlo como recibido, te pediremos el valor real.',
+      },
+      autoMove: {
+        gasto:
+          'Encendido: al marcar el pago en Fijos se agrega solo a tus movimientos del mes. Apagado: solo queda marcado como pagado en Fijos.',
+        ingreso:
+          'Encendido: al marcar el ingreso en Fijos se agrega solo a tus movimientos del mes. Apagado: solo queda marcado como recibido en Fijos.',
+      },
+      remind: {
+        gasto: 'Te avisa antes de la fecha de pago para que no se te pase. Debajo eliges con cuántos días de anticipación.',
+        ingreso: 'Te avisa alrededor de la fecha esperada para que confirmes si llegó. Debajo eliges con cuántos días de anticipación.',
+      },
+      remindDays: 'Cuántos días antes de la fecha llega el aviso: desde el mismo día hasta 7 días antes.',
+    },
   },
 
   history: {
@@ -533,6 +577,16 @@ export const es = {
       goalName: '¿Para qué estás ahorrando?',
       goalNamePlaceholder: 'Ej. Viaje, portátil, matrícula',
       quickAdd: '+ {{n}} mil',
+    },
+    help: {
+      input: {
+        update:
+          'Escribe el saldo total que tienes ahorrado hoy, no lo que agregaste. La app lo compara con el saldo anterior y calcula cuánto ahorraste o cuánto bajó.',
+        add: 'Lo que vas a sumar a tu ahorro; se agrega al total actual. Los botones de abajo suman montos rápidos al valor escrito.',
+        goal: 'Lo que apartas para esta meta; se suma a lo que ya llevas en ella. Los botones de abajo suman montos rápidos al valor escrito.',
+        newGoal: 'El valor total que quieres reunir. Con él se calcula tu progreso y cuánto te falta.',
+      },
+      goalName: 'Un nombre corto para reconocer la meta en tu lista, por ejemplo "Viaje". Máximo 40 caracteres.',
     },
   },
 
@@ -673,6 +727,27 @@ export const es = {
       repeat: '¿Cada cuánto se repite?',
       review: 'Revisa y ajusta',
     },
+    type: 'Tipo',
+    help: {
+      type: 'Gasto: dinero que sale, como compras o pagos. Ingreso: dinero que entra, como tu salario o una venta. Según el tipo cambian las categorías.',
+      amount: 'Escribe el valor en pesos, solo números. Los puntos de miles se ponen solos.',
+      frequency:
+        'Ocasional: pasa una sola vez, como una compra. Fijo: se repite cada cierto tiempo, como el arriendo o el salario; la app lo agenda en Fijos y puede avisarte antes de cada fecha.',
+      category: {
+        gasto: 'Agrupa el gasto para ver en qué se va tu dinero en los resúmenes. Toca una opción para elegirla.',
+        ingreso: 'Agrupa el ingreso para ver de dónde viene tu dinero en los resúmenes. Toca una opción para elegirla.',
+      },
+      note: 'Un texto corto para reconocerlo en tu lista. Si lo dejas vacío, se muestra el nombre de la categoría. Máximo 60 caracteres.',
+      date: 'El día en que pasó o va a pasar. Toca para abrir el calendario y elegir otra fecha.',
+      firstDate: {
+        gasto: 'Desde esta fecha empieza a repetirse. El día que elijas también queda como día de pago en la periodicidad.',
+        ingreso: 'Desde esta fecha empieza a repetirse. El día que elijas también queda como día en que te pagan en la periodicidad.',
+      },
+      paid: {
+        gasto: 'Sí: el dinero ya salió. No: queda como pendiente en tu lista hasta que lo marques como pagado.',
+        ingreso: 'Sí: el dinero ya llegó. No: queda como por recibir en tu lista hasta que lo marques como recibido.',
+      },
+    },
   },
 
   settings: {
@@ -761,22 +836,89 @@ export const es = {
       reorder: 'Cambiar orden de los bloques',
       reorderText: 'Arrastra balance, ahorro, calendario y más en una maqueta.',
     },
+    backup: {
+      title: 'Respaldo automático',
+      text: 'Guarda una copia de todos tus datos en el teléfono (CSV). Si la app abre sin datos, se recuperan de aquí. Expórtala para no perderla si desinstalas la app.',
+      every: 'Respaldar cada',
+      options: {
+        d1: '1 día',
+        d3: '3 días',
+        d7: '1 semana',
+        d15: '15 días',
+        d30: '1 mes',
+      },
+      last: 'Último respaldo: {{date}}',
+      none: 'Aún no hay respaldo',
+      noneText: 'Se crea en cuanto registres datos.',
+      nextText: 'Se actualiza al usar la app cuando pase la frecuencia elegida.',
+      now: 'Respaldar ahora',
+      saving: 'Respaldando…',
+      saved: 'Respaldo guardado',
+      savedText: 'Todos tus datos quedaron copiados.',
+      failed: 'No se pudo respaldar',
+      export: 'Exportar',
+      exported: 'Respaldo exportado',
+      exportedText: '{{name}}: guárdalo para importarlo después o en otro teléfono.',
+      exportFailed: 'No se pudo exportar el respaldo',
+      import: 'Importar',
+      importConfirmTitle: '¿Importar este respaldo?',
+      importConfirmText:
+        'Es del {{date}}. Tus datos y ajustes actuales se reemplazan por los del archivo, y queda como tu respaldo automático.',
+      importConfirmTextNoDate:
+        'Tus datos y ajustes actuales se reemplazan por los del archivo, y queda como tu respaldo automático.',
+      importConfirm: 'Importar',
+      imported: 'Respaldo importado',
+      importedText: 'Tus datos se cargaron desde el archivo.',
+      importFailed: 'No se pudo importar',
+    },
     data: {
       title: 'Tus datos',
-      export: 'Exportar datos (CSV)',
+      export: 'Exportar reporte para Excel (CSV)',
       exported: 'Exportación lista',
       exportedText: '{{name}} con todos tus datos',
       exportFailed: 'No se pudo exportar',
       wipeAll: 'Borrar todos los datos',
       wipeTitle: '¿Borrar todos tus datos?',
       wipeText:
-        'Se eliminan movimientos, gastos e ingresos fijos, ahorro, metas e historial. Tus ajustes se conservan. Esta acción no se puede deshacer; exporta antes si quieres una copia.',
+        'Se eliminan movimientos, gastos e ingresos fijos, ahorro, metas, historial y el respaldo automático. Tus ajustes se conservan. Esta acción no se puede deshacer; exporta antes si quieres una copia.',
       wipeWord: 'BORRAR',
       wipeTypeToConfirm: 'Escribe {{word}} para confirmar',
       wipeConfirm: 'Borrar todo',
       wiped: 'Datos borrados',
       wipedText: 'La app quedó en cero. Tus ajustes se mantienen.',
     },
+    help: {
+      defaults:
+        'La periodicidad que aparece marcada al crear un gasto o ingreso fijo. Toca cada tipo para cambiarla. No modifica los fijos que ya existen.',
+      monthStart:
+        'El día en que empieza tu mes para el balance y los reportes. Si te pagan el 25, ponlo en 25 y tu mes irá del 25 al 24. Llega hasta 28 para que exista en todos los meses.',
+      holidayRule:
+        'Qué hacer cuando la fecha de un fijo cae en sábado, domingo o festivo: dejarla igual, adelantarla al día hábil anterior o pasarla al siguiente.',
+      cacheFor:
+        'Cada cuánto se vuelven a descargar los festivos. Cambian poco, así que un periodo largo ahorra datos. "Actualizar ahora" los descarga de inmediato.',
+      remindFixed:
+        'Interruptor general de los recordatorios de fijos. Si lo apagas no llega ningún aviso, aunque el fijo tenga el recordatorio encendido.',
+      budget:
+        'Muestra un aviso en Inicio cuando lo que llevas gastado en el mes llega al porcentaje de tus ingresos que elijas debajo.',
+      budgetAt: 'Porcentaje de tus ingresos del mes desde el cual aparece la alerta. Va de 50 % a 100 %, de 5 en 5.',
+      weekly: 'Cada lunes recibes un resumen de lo que gastaste la semana anterior y de los pagos que vienen.',
+      hour: 'La hora a la que llegan los recordatorios y el resumen semanal.',
+      hideAmounts: 'Oculta los valores en la pantalla de Inicio por si alguien ve tu teléfono. Toca el saldo para mostrarlos.',
+      lock: 'Pide la huella, el rostro o el PIN del teléfono cada vez que abres la app. Debe estar configurado en el teléfono.',
+      backupEvery:
+        'Cada cuánto se actualiza la copia automática guardada en el teléfono. Se hace al usar la app, cuando ya pasó este tiempo.',
+    },
+  },
+
+  backup: {
+    restoredTitle: 'Datos recuperados',
+    restoredText: 'La app no tenía datos y se cargó el respaldo automático del {{date}}.',
+    restoreFailedTitle: 'No se pudo recuperar el respaldo',
+    fileName: 'mis-finanzas-respaldo-{{date}}.csv',
+    shareTitle: 'Respaldo de Mis finanzas',
+    notABackup:
+      'Ese archivo no es un respaldo de Mis finanzas. Usa uno creado con "Exportar" en Respaldo automático (el reporte de "Tus datos" no sirve para importar).',
+    newerVersion: 'El respaldo es de una versión más nueva de la app. Actualízala para importarlo.',
   },
 
   homeOrder: {

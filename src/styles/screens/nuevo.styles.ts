@@ -5,6 +5,7 @@ import { C } from '@/constants/theme';
 export const styles = StyleSheet.create({
   topSpacer: { width: 44 },
   amount: { alignItems: 'center', gap: 6, paddingTop: 8 },
+  amountLabel: { alignItems: 'center' },
   freq: { flex: 1, minHeight: 72, padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 4, borderWidth: 1, borderColor: C.line },
   freqOn: { borderWidth: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

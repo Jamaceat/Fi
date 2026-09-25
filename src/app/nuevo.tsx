@@ -9,7 +9,20 @@ import { DatePicker } from '@/components/calendar';
 import { draftValues, FixedForm, kindPatch, newFixedDraft, type FixedDraft } from '@/components/fixed-form';
 import { IconCalendar, IconChevronLeft, IconClose, IconTrash } from '@/components/icons';
 import { StepIndicator } from '@/components/step-indicator';
-import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, Stack, T, Tap } from '@/components/ui';
+import {
+  AmountField,
+  Field,
+  Label,
+  PrimaryButton,
+  RoundButton,
+  Row,
+  Screen,
+  Segmented,
+  Sheet,
+  Stack,
+  T,
+  Tap,
+} from '@/components/ui';
 import { C } from '@/constants/theme';
 import { deleteMovement, getMovement, insertFixed, insertMovement, updateMovement, type Movement } from '@/db/repo';
 import { t, tList } from '@/i18n';
@@ -184,34 +197,30 @@ export default function Nuevo() {
 
   // ——— Bloques ———
 
-  const label = (text: string, optional?: boolean) => (
-    <T w={800} size={14}>
-      {text}
-      {optional && (
-        <T w={500} size={14} color={C.muted}>
-          {' '}
-          {t('common.optional')}
-        </T>
-      )}
-    </T>
-  );
-
   const tipoPicker = !linked && (
-    <Segmented
-      options={[
-        { id: 'gasto', label: t('common.expense'), activeBg: C.out, activeFg: C.white },
-        { id: 'ingreso', label: t('common.income'), activeBg: C.in, activeFg: C.white },
-      ]}
-      value={tipo}
-      onChange={pickTipo}
-    />
+    <Stack gap={10}>
+      <Label text={t('newMovement.type')} help={t('newMovement.help.type')} />
+      <Segmented
+        options={[
+          { id: 'gasto', label: t('common.expense'), activeBg: C.out, activeFg: C.white },
+          { id: 'ingreso', label: t('common.income'), activeBg: C.in, activeFg: C.white },
+        ]}
+        value={tipo}
+        onChange={pickTipo}
+      />
+    </Stack>
   );
 
   const amountInput = (
     <View style={st.amount}>
-      <T w={700} size={13} color={C.muted}>
-        {t('newMovement.amount')}
-      </T>
+      <Label
+        text={t('newMovement.amount')}
+        help={t('newMovement.help.amount')}
+        w={700}
+        size={13}
+        color={C.muted}
+        style={st.amountLabel}
+      />
       <AmountField
         value={dots(amount)}
         onChangeText={(text) => setAmount(cleanAmount(text))}
@@ -223,7 +232,7 @@ export default function Nuevo() {
 
   const freqPicker = !editing && (
     <Stack gap={10}>
-      {label(t('newMovement.frequency'))}
+      <Label text={t('newMovement.frequency')} help={t('newMovement.help.frequency')} />
       <Row gap={10}>
         {FREQS.map((fid) => {
           const on = freq === fid;
@@ -248,7 +257,7 @@ export default function Nuevo() {
 
   const categoryGrid = (
     <Stack gap={10}>
-      {label(t('newMovement.category'))}
+      <Label text={t('newMovement.category')} help={t(`newMovement.help.category.${tipo}`)} />
       <View style={st.grid}>
         {cats.map((c) => {
           const on = c === cat;
@@ -270,14 +279,17 @@ export default function Nuevo() {
 
   const noteField = (
     <Stack gap={6}>
-      {label(t('newMovement.note'), true)}
+      <Label text={t('newMovement.note')} help={t('newMovement.help.note')} optional />
       <Field value={note} onChangeText={(text) => setNote(text.slice(0, 60))} placeholder={t('newMovement.notePlaceholder')} />
     </Stack>
   );
 
   const dateButton = (
     <Stack gap={6}>
-      {label(isFixed ? t(`newMovement.firstDate.${tipo}`) : t('newMovement.date'))}
+      <Label
+        text={isFixed ? t(`newMovement.firstDate.${tipo}`) : t('newMovement.date')}
+        help={isFixed ? t(`newMovement.help.firstDate.${tipo}`) : t('newMovement.help.date')}
+      />
       <Tap onPress={() => setDateOpen(true)} style={common.dateBtn}>
         <T w={600} size={14.5}>
           {date === todayISO() ? t('newMovement.todayDate', { date: longDate(date) }) : longDate(date)}
@@ -289,7 +301,7 @@ export default function Nuevo() {
 
   const paidPicker = freq === 'ocasional' && !linked && (
     <Stack gap={6}>
-      {label(t(`newMovement.paidQuestion.${tipo}`))}
+      <Label text={t(`newMovement.paidQuestion.${tipo}`)} help={t(`newMovement.help.paid.${tipo}`)} />
       <Segmented
         options={[
           { id: 'si', label: t(`newMovement.paidYes.${tipo}`), activeBg: accent, activeFg: C.white },

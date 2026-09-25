@@ -23,6 +23,8 @@ export const styles = StyleSheet.create({
   radioGroup: { paddingVertical: 12, gap: 8 },
   holidayBox: { padding: 14, gap: 12 },
   holidayStatus: { paddingTop: 12 },
+  backupBox: { padding: 14, gap: 12 },
+  backupStatus: { paddingTop: 12 },
   refreshBtn: { height: 46 },
   refreshing: { opacity: 0.5 },
   radio: {
