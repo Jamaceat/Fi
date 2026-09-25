@@ -1,65 +1,60 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
+// Paleta y tipografía tomadas del diseño (Diseño/project/*.dc.html).
 
-import '@/global.css';
+export const C = {
+  bg: '#F4F1EC',
+  ink: '#1B1A17',
+  card: '#FFFFFF',
+  line: '#E4DFD6',
+  divider: '#EEEAE3',
+  muted: '#6B665E',
+  muted2: '#5E5A53',
+  faint: '#A39D93',
+  ring: '#BDB6AA',
+  segBg: '#E9E4DC',
+  chip: '#F1ECE4',
 
-import { Platform } from 'react-native';
+  // Gasto
+  out: '#B4501A',
+  outDark: '#8A3C12',
+  outSoft: '#FBEDE3',
+  outBar: '#E08A4F',
+  outBarLight: '#E9B08A',
+  outText: '#F0A36F',
+  warn: '#A2461A',
+  danger: '#9A3F12',
 
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
+  // Ingreso
+  in: '#1D5C8C',
+  inDark: '#164A72',
+  inSoft: '#E3EEF6',
+  inBarLight: '#8DB6D6',
+  inText: '#9CC5E6',
+  inTrack: '#EDF1F4',
+  inTrack2: '#C9DCEA',
+  inSub: '#BFD6E8',
+
+  // Extraordinario
+  extra: '#6E4FA3',
+  extraDark: '#5B3E8A',
+  extraSoft: '#EFEAF7',
+
+  // Tarjeta oscura
+  hero: '#1B1A17',
+  heroTile: '#2A2925',
+  heroTrack: '#3A3833',
+  heroSub: '#C9C3B8',
+  outTrack: '#F1ECE4',
+  switchOff: '#CFC9BF',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
+export const F = {
+  serif500: 'Fraunces_500Medium',
+  serif600: 'Fraunces_600SemiBold',
+  400: 'Manrope_400Regular',
+  500: 'Manrope_500Medium',
+  600: 'Manrope_600SemiBold',
+  700: 'Manrope_700Bold',
+  800: 'Manrope_800ExtraBold',
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+export type Weight = 400 | 500 | 600 | 700 | 800;
