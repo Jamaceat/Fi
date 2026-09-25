@@ -318,6 +318,9 @@ export function Stepper({
   decLabel = 'Restar',
   incLabel = 'Sumar',
   minWidth = 40,
+  gap = 4,
+  onChange,
+  inputLabel,
 }: {
   value: string;
   onDec: () => void;
@@ -325,15 +328,38 @@ export function Stepper({
   decLabel?: string;
   incLabel?: string;
   minWidth?: number;
+  gap?: number;
+  /** Si se pasa, el número también se puede escribir directamente. */
+  onChange?: (n: number) => void;
+  inputLabel?: string;
 }) {
+  // Texto mientras se escribe; al salir del campo vuelve a mostrar `value` (ya ajustado por quien llama).
+  const [typing, setTyping] = useState<string | null>(null);
   return (
-    <Row gap={4} style={s.stepper}>
+    <Row gap={gap} style={s.stepper}>
       <Tap onPress={onDec} accessibilityLabel={decLabel} style={s.stepBtn}>
         <IconMinus size={16} />
       </Tap>
-      <T w={800} size={15} tabular style={{ minWidth, textAlign: 'center' }} accessibilityLiveRegion="polite">
-        {value}
-      </T>
+      {onChange ? (
+        <TextInput
+          value={typing ?? value}
+          onChangeText={(t) => {
+            const digits = t.replace(/\D/g, '');
+            setTyping(digits);
+            if (digits) onChange(Number(digits));
+          }}
+          onBlur={() => setTyping(null)}
+          selectTextOnFocus
+          keyboardType="number-pad"
+          maxLength={3}
+          accessibilityLabel={inputLabel}
+          style={[s.stepInput, { minWidth }]}
+        />
+      ) : (
+        <T w={800} size={15} tabular style={{ minWidth, textAlign: 'center' }} accessibilityLiveRegion="polite">
+          {value}
+        </T>
+      )}
       <Tap onPress={onInc} accessibilityLabel={incLabel} style={s.stepBtn}>
         <IconPlus size={16} />
       </Tap>
@@ -601,6 +627,16 @@ export const s = StyleSheet.create({
     backgroundColor: C.card,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stepInput: {
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: C.card,
+    textAlign: 'center',
+    fontFamily: F[800],
+    fontSize: 15,
+    color: C.ink,
+    padding: 0,
   },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 10, height: 10, borderRadius: 5 },

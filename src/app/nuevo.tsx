@@ -5,11 +5,12 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePicker } from '@/components/calendar';
+import { draftValues, FixedForm, kindPatch, newFixedDraft, type FixedDraft } from '@/components/fixed-form';
 import { IconCalendar, IconClose, IconTrash } from '@/components/icons';
 import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { deleteMovement, getMovement, insertFixed, insertMovement, updateMovement, type Movement } from '@/db/repo';
-import { fromISO, longDate, periodOf, periodRange, todayISO } from '@/lib/dates';
+import { fromISO, longDate, periodOf, periodRange, todayISO, weekdayOf } from '@/lib/dates';
 import { cleanAmount, dots } from '@/lib/format';
 import type { Kind } from '@/lib/schedule';
 import { useApp } from '@/state/app';
@@ -36,8 +37,8 @@ export default function Nuevo() {
   const [note, setNote] = useState('');
   // Ocasional: ya pagado/recibido o pendiente.
   const [paid, setPaid] = useState(true);
-  const [day, setDay] = useState(fromISO(initialDate).getDate());
-  const [dayOpen, setDayOpen] = useState(false);
+  // Fijo: mismo formulario que Fijos > Agregar. Tipo y monto se comparten con esta pantalla.
+  const [fx, setFx] = useState<FixedDraft>(() => newFixedDraft(kind === 'ingreso' ? 'ingreso' : 'gasto', settings, initialDate));
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -61,15 +62,23 @@ export default function Nuevo() {
   const linked = editing?.fixed_id != null;
   const cats = CATS[tipo].includes(cat) ? CATS[tipo] : [...CATS[tipo], cat];
   const n = Number(amount) || 0;
+  const isFixed = freq === 'fijo' && !editing;
+  const fxDraft: FixedDraft = { ...fx, kind: tipo, amount, category: cat };
+  const setFxPatch = (patch: Partial<FixedDraft>) => setFx((prev) => ({ ...prev, ...patch }));
+  // El fijo arranca en el periodo de la fecha elegida (hoy, o el día tocado en el calendario).
+  const fixedStart = periodRange(periodOf(date, settings.monthStart), settings.monthStart).from;
 
   const pickTipo = (t: Kind) => {
     setTipo(t);
     setCat(t === 'gasto' ? 'Mercado' : 'Salario');
+    setFx((prev) => ({ ...prev, ...kindPatch(prev, t, true, settings) }));
   };
 
   const pickDate = (iso: string) => {
     setDate(iso);
-    setDay(fromISO(iso).getDate());
+    // En un fijo, la fecha elegida también marca el día en que se repite.
+    const dd = fromISO(iso);
+    setFxPatch({ day: dd.getDate(), day1: dd.getDate(), weekday: weekdayOf(iso) });
     setDateOpen(false);
   };
 
@@ -91,28 +100,9 @@ export default function Nuevo() {
       } else if (freq === 'ocasional') {
         await insertMovement(db, { type: tipo, name, category: cat, amount: n, date, note: note.trim(), paid: paid ? 1 : 0 });
       } else {
-        // Fijo: solo crea la regla mensual. Anticipado no es pagado: la primera ocurrencia
+        // Fijo: solo crea la regla. Anticipado no es pagado: la primera ocurrencia
         // queda pendiente en Fijos hasta que se marque.
-        const range = periodRange(periodOf(date, settings.monthStart), settings.monthStart);
-        await insertFixed(db, {
-          type: tipo,
-          name,
-          category: cat,
-          amount: n,
-          preset: 'mensual',
-          day,
-          day1: 15,
-          day2: 30,
-          weekday: 0,
-          custom_n: 1,
-          custom_unit: 'meses',
-          anticipated: 1,
-          variable: 0,
-          auto_move: 1,
-          remind: 1,
-          remind_days: 2,
-          start_date: range.from,
-        });
+        await insertFixed(db, { ...draftValues(fxDraft, fx.name.trim() || cat), start_date: fixedStart });
       }
       bump();
       router.back();
@@ -141,7 +131,15 @@ export default function Nuevo() {
     );
   };
 
-  const saveLabel = editing ? 'Guardar cambios' : g ? 'Guardar gasto' : 'Guardar ingreso';
+  const saveLabel = editing
+    ? 'Guardar cambios'
+    : freq === 'fijo'
+      ? g
+        ? 'Crear gasto fijo'
+        : 'Crear ingreso fijo'
+      : g
+        ? 'Guardar gasto'
+        : 'Guardar ingreso';
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -189,7 +187,7 @@ export default function Nuevo() {
               {(
                 [
                   ['ocasional', 'Ocasional', 'Solo esta vez'],
-                  ['fijo', 'Fijo', 'Se repite cada mes'],
+                  ['fijo', 'Fijo', 'Se repite'],
                 ] as const
               ).map(([fid, title, desc]) => {
                 const on = freq === fid;
@@ -209,18 +207,6 @@ export default function Nuevo() {
                 );
               })}
             </Row>
-            {freq === 'fijo' && (
-              <Row style={st.dayRow}>
-                <T w={600} size={13.5} style={{ flex: 1 }}>
-                  {g ? 'Se paga cada mes el' : 'Se recibe cada mes el'}
-                </T>
-                <Tap onPress={() => setDayOpen(true)} style={st.dayBtn}>
-                  <T w={800} size={14}>
-                    Día {day}
-                  </T>
-                </Tap>
-              </Row>
-            )}
           </View>
         )}
 
@@ -249,7 +235,7 @@ export default function Nuevo() {
         <View style={{ gap: 10 }}>
           <View style={{ gap: 6 }}>
             <T w={800} size={14}>
-              Fecha
+              {isFixed ? (g ? 'Primer pago' : 'Primer ingreso') : 'Fecha'}
             </T>
             <Tap onPress={() => setDateOpen(true)} style={st.dateBtn}>
               <T w={600} size={14.5}>
@@ -258,16 +244,22 @@ export default function Nuevo() {
               <IconCalendar color={C.muted} />
             </Tap>
           </View>
-          <View style={{ gap: 6 }}>
-            <T w={800} size={14}>
-              Nota{' '}
-              <T w={500} size={14} color={C.muted}>
-                (opcional)
+          {!isFixed && (
+            <View style={{ gap: 6 }}>
+              <T w={800} size={14}>
+                Nota{' '}
+                <T w={500} size={14} color={C.muted}>
+                  (opcional)
+                </T>
               </T>
-            </T>
-            <Field value={note} onChangeText={(t) => setNote(t.slice(0, 60))} placeholder="Ej. mercado de la semana" />
-          </View>
+              <Field value={note} onChangeText={(t) => setNote(t.slice(0, 60))} placeholder="Ej. mercado de la semana" />
+            </View>
+          )}
         </View>
+
+        {isFixed && (
+          <FixedForm d={fxDraft} set={setFxPatch} startDate={fixedStart} accent={accent} hideAmount hideCategory nameOptional />
+        )}
 
         {freq === 'ocasional' && !linked && (
           <View style={{ gap: 6 }}>
@@ -290,27 +282,6 @@ export default function Nuevo() {
         <PrimaryButton label={saveLabel} bg={accent} disabled={n <= 0 || saving} onPress={save} />
       </View>
 
-      <Sheet visible={dayOpen} onClose={() => setDayOpen(false)} title="Día del mes">
-        <View style={st.days}>
-          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-            <Tap
-              key={d}
-              onPress={() => {
-                setDay(d);
-                setDayOpen(false);
-              }}
-              style={[st.dayCell, d === day && { backgroundColor: accent, borderColor: accent }]}>
-              <T w={800} size={14} color={d === day ? '#FFFFFF' : C.ink}>
-                {d}
-              </T>
-            </Tap>
-          ))}
-        </View>
-        <T size={12.5} color={C.muted}>
-          Si el mes es más corto, cuenta el último día del mes.
-        </T>
-      </Sheet>
-
       <Sheet visible={dateOpen} onClose={() => setDateOpen(false)} title="Fecha">
         <DatePicker value={date} onChange={pickDate} filter={tipo} />
       </Sheet>
@@ -320,16 +291,6 @@ export default function Nuevo() {
 
 const st = StyleSheet.create({
   freq: { flex: 1, minHeight: 72, padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 4 },
-  dayRow: {
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingRight: 6,
-    paddingLeft: 14,
-  },
-  dayBtn: { height: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: C.chip, justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   cat: {
     width: '31.5%',
@@ -361,16 +322,5 @@ const st = StyleSheet.create({
     backgroundColor: C.bg,
     borderTopWidth: 1,
     borderTopColor: C.line,
-  },
-  days: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  dayCell: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
