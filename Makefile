@@ -1,4 +1,4 @@
-.PHONY: help install start start-tunnel android web clean reset prebuild local-apk local-apk-rebuild local-apk-clean eas-login eas-config eas-apk eas-aab adb-reverse start-tablet open-tablet wsl-usb
+.PHONY: help install start start-tunnel android web clean reset prebuild local-apk local-apk-rebuild local-apk-clean eas-login eas-config eas-apk eas-aab adb-reverse start-tablet open-tablet screenshot wsl-usb
 
 # Puerto para depuración móvil (configurable vía: make <target> PORT=xxxx)
 PORT ?= 8082
@@ -26,6 +26,7 @@ help:
 	@echo "  adb-reverse      Configura la redirección de puertos USB para depurar en tablet (puerto $(PORT))"
 	@echo "  start-tablet     Inicia Metro en puerto $(PORT) y configura redirección ADB"
 	@echo "  open-tablet      Abre la aplicación en la tablet conectada por USB (abre Expo Go)"
+	@echo "  screenshot       Toma una captura de pantalla del dispositivo Android vía ADB y la guarda en ./screenshots"
 	@echo "  wsl-usb          Muestra los comandos de PowerShell para conectar USB a WSL"
 	@echo "  clean            Limpia la caché del empaquetador Metro y Expo"
 	@echo "  reset            Ejecuta el script de reinicio del proyecto"
@@ -71,6 +72,20 @@ start-tablet: adb-reverse
 open-tablet:
 	@echo "$(BLUE)Abriendo la aplicación en la tablet (Expo Go)...$(RESET)"
 	adb shell am start -a android.intent.action.VIEW -d "exp://localhost:$(PORT)"
+
+screenshot:
+	@mkdir -p screenshots
+	@FILENAME="screenshots/screenshot_$$(date +%Y%m%d_%H%M%S).png"; \
+	echo "$(BLUE)Capturando pantalla del dispositivo Android vía ADB...$(RESET)"; \
+	if adb exec-out screencap -p > "$$FILENAME" 2>/dev/null && [ -s "$$FILENAME" ]; then \
+		echo "$(GREEN)Captura guardada exitosamente en: $(BLUE)$$FILENAME$(RESET)"; \
+	elif adb shell screencap -p /sdcard/temp_sc.png 2>/dev/null && adb pull /sdcard/temp_sc.png "$$FILENAME" >/dev/null 2>&1 && adb shell rm -f /sdcard/temp_sc.png >/dev/null 2>&1 && [ -s "$$FILENAME" ]; then \
+		echo "$(GREEN)Captura guardada exitosamente en: $(BLUE)$$FILENAME$(RESET)"; \
+	else \
+		rm -f "$$FILENAME"; \
+		echo "\033[1;31mError: No se pudo capturar la pantalla. Verifica que el dispositivo esté conectado ('adb devices') o configurado con 'make wsl-usb'.$(RESET)"; \
+		exit 1; \
+	fi
 
 clean:
 	@echo "$(BLUE)Limpiando caché de Metro y carpeta de salida...$(RESET)"
