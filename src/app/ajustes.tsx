@@ -221,8 +221,8 @@ export default function Ajustes() {
             </Stack>
             <Stepper
               value={String(s.monthStart)}
-              onDec={() => updateSettings({ monthStart: s.monthStart <= 1 ? 28 : s.monthStart - 1 })}
-              onInc={() => updateSettings({ monthStart: s.monthStart >= 28 ? 1 : s.monthStart + 1 })}
+              onDec={() => updateSettings({ monthStart: Math.max(1, s.monthStart - 1) })}
+              onInc={() => updateSettings({ monthStart: Math.min(28, s.monthStart + 1) })}
               decLabel={t('settings.month.prevDay')}
               incLabel={t('settings.month.nextDay')}
             />

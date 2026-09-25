@@ -22,7 +22,7 @@ import { t } from '@/i18n';
 import { initial } from '@/lib/format';
 import { layout } from '@/styles/common';
 
-import { IconCheck, IconChevronLeft, IconClose, IconHelp, IconMinus, IconPlus } from './icons';
+import { IconCheck, IconChevronLeft, IconClose, IconHelp } from './icons';
 import { styles as s } from './ui.styles';
 
 // ——— Texto ———
@@ -364,61 +364,7 @@ export function SwitchRow({
   );
 }
 
-export function Stepper({
-  value,
-  onDec,
-  onInc,
-  decLabel = t('ui.decrease'),
-  incLabel = t('ui.increase'),
-  minWidth = 40,
-  gap = 4,
-  onChange,
-  inputLabel,
-}: {
-  value: string;
-  onDec: () => void;
-  onInc: () => void;
-  decLabel?: string;
-  incLabel?: string;
-  minWidth?: number;
-  gap?: number;
-  /** Si se pasa, el número también se puede escribir directamente. */
-  onChange?: (n: number) => void;
-  inputLabel?: string;
-}) {
-  // Texto mientras se escribe; al salir del campo vuelve a mostrar `value` (ya ajustado por quien llama).
-  const [typing, setTyping] = useState<string | null>(null);
-  return (
-    <Row gap={gap} style={s.stepper}>
-      <Tap onPress={onDec} accessibilityLabel={decLabel} style={s.stepBtn}>
-        <IconMinus size={16} />
-      </Tap>
-      {onChange ? (
-        <TextInput
-          value={typing ?? value}
-          onChangeText={(text) => {
-            const digits = text.replace(/\D/g, '');
-            setTyping(digits);
-            if (digits) onChange(Number(digits));
-          }}
-          onBlur={() => setTyping(null)}
-          selectTextOnFocus
-          keyboardType="number-pad"
-          maxLength={3}
-          accessibilityLabel={inputLabel}
-          style={[s.stepInput, { minWidth }]}
-        />
-      ) : (
-        <T w={800} size={15} tabular style={[s.stepValue, { minWidth }]} accessibilityLiveRegion="polite">
-          {value}
-        </T>
-      )}
-      <Tap onPress={onInc} accessibilityLabel={incLabel} style={s.stepBtn}>
-        <IconPlus size={16} />
-      </Tap>
-    </Row>
-  );
-}
+export { Stepper } from './stepper';
 
 export function RadioDot({ on, accent }: { on: boolean; accent: string }) {
   return (

@@ -82,27 +82,6 @@ export const styles = StyleSheet.create({
   listRowRaised: { zIndex: 1 },
   divider: { borderTopWidth: 1, borderTopColor: C.divider },
 
-  stepper: { backgroundColor: C.chip, borderRadius: 14, padding: 4 },
-  stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: C.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepInput: {
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: C.card,
-    textAlign: 'center',
-    fontFamily: F[800],
-    fontSize: 15,
-    color: C.ink,
-    padding: 0,
-  },
-  stepValue: { textAlign: 'center' },
-
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioOff: { borderColor: C.ring },
   radioDot: { width: 10, height: 10, borderRadius: 5 },

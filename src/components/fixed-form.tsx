@@ -160,7 +160,7 @@ export const scheduleChanged = (original: Fixed | null, d: FixedDraft) =>
 
 export const fixedAccent = (kind: Kind) => (kind === 'gasto' ? C.ink : C.in);
 
-const wrapDay = (v: number) => (v < 1 ? 31 : v > 31 ? 1 : v);
+const clampDay = (v: number) => Math.min(31, Math.max(1, v));
 
 const APPLY_OPTIONS: ApplyTo[] = ['siguientes', 'todos'];
 
@@ -268,12 +268,11 @@ export function FixedForm({
       </T>
       <Stepper
         value={String(d[key])}
-        gap={14}
         minWidth={48}
-        onChange={(v) => set({ [key]: Math.min(31, Math.max(1, v)) })}
+        onChange={(v) => set({ [key]: clampDay(v) })}
         inputLabel={label}
-        onDec={() => set({ [key]: wrapDay(d[key] - 1) })}
-        onInc={() => set({ [key]: wrapDay(d[key] + 1) })}
+        onDec={() => set({ [key]: clampDay(d[key] - 1) })}
+        onInc={() => set({ [key]: clampDay(d[key] + 1) })}
         decLabel={t('fixedForm.day.decrease', { label: label.toLowerCase() })}
         incLabel={t('fixedForm.day.increase', { label: label.toLowerCase() })}
       />

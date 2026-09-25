@@ -137,8 +137,11 @@ export const es = {
   ui: {
     amountLabel: 'Monto, {{amount}} pesos',
     closeNotice: 'Cerrar aviso',
+    barHint: 'Desliza hacia menos o más; cuanto más lejos, más rápido cambia',
     closePanel: 'Cerrar panel',
     decrease: 'Restar',
+    dialHint: 'Toca para abrir y ajustar el valor',
+    done: 'Listo',
     helpLabel: 'Qué significa {{label}}',
     increase: 'Sumar',
     stepOf: 'Paso {{n}} de {{total}}',

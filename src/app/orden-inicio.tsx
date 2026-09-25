@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +23,8 @@ import { common, layout } from '@/styles/common';
 import { GAP, ITEM_H, styles as st } from '@/styles/screens/orden-inicio.styles';
 
 const SLOT = ITEM_H + GAP;
-const SPRING = { damping: 20, stiffness: 220 };
+// Llegan desacelerando, sin rebote.
+const EASE = { duration: 220, easing: Easing.out(Easing.cubic) };
 
 type Positions = Record<HomeBlock, number>;
 
@@ -161,7 +163,7 @@ function Item({
   useAnimatedReaction(
     () => positions.get()[id],
     (pos, prev) => {
-      if (pos !== prev && !active.get()) top.set(withSpring(pos * SLOT, SPRING));
+      if (pos !== prev && !active.get()) top.set(withTiming(pos * SLOT, EASE));
     },
   );
 
@@ -191,15 +193,15 @@ function Item({
     .onFinalize(() => {
       if (!active.get()) return;
       active.set(false);
-      top.set(withSpring(positions.get()[id] * SLOT, SPRING));
+      top.set(withTiming(positions.get()[id] * SLOT, EASE));
       scheduleOnRN(onDrop, positions.get());
     });
 
   const style = useAnimatedStyle(() => ({
     top: top.get(),
     zIndex: active.get() ? 10 : 0,
-    transform: [{ scale: withSpring(active.get() ? 1.04 : 1) }],
-    shadowOpacity: withSpring(active.get() ? 0.18 : 0),
+    transform: [{ scale: withTiming(active.get() ? 1.04 : 1, EASE) }],
+    shadowOpacity: withTiming(active.get() ? 0.18 : 0, EASE),
     elevation: active.get() ? 8 : 0,
   }));
 
