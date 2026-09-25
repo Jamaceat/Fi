@@ -1,5 +1,7 @@
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
+import { C } from '@/constants/theme';
+
 type P = { size?: number; color?: string; stroke?: number };
 
 const base = (size: number, color: string, stroke: number) =>
@@ -15,7 +17,7 @@ const base = (size: number, color: string, stroke: number) =>
   }) as const;
 
 function make(paths: string[], def = 2) {
-  function Icon({ size = 18, color = '#1B1A17', stroke = def }: P) {
+  function Icon({ size = 18, color = C.ink, stroke = def }: P) {
     return (
       <Svg {...base(size, color, stroke)}>
         {paths.map((d) => (
@@ -52,43 +54,43 @@ export const IconWrench = make(
   ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
   1.9,
 );
-export const IconPending =make(['M20.5 12a8.5 8.5 0 1 1-4.2-7.3', 'M12 7.5V12l2.8 1.8', 'M19.5 3.5v4M19.5 10h.01'], 1.9);
-export const IconGear = ({ size = 19, color = '#1B1A17', stroke = 1.9 }: P) => (
+export const IconPending = make(['M20.5 12a8.5 8.5 0 1 1-4.2-7.3', 'M12 7.5V12l2.8 1.8', 'M19.5 3.5v4M19.5 10h.01'], 1.9);
+export const IconGear = ({ size = 19, color = C.ink, stroke = 1.9 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={3} />
     <Path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
   </Svg>
 );
 
-export const IconCalendar = ({ size = 18, color = '#1B1A17', stroke = 1.9 }: P) => (
+export const IconCalendar = ({ size = 18, color = C.ink, stroke = 1.9 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Rect x={3.5} y={5} width={17} height={15} rx={3} />
     <Path d="M3.5 10h17M8 3v4M16 3v4" />
   </Svg>
 );
 
-export const IconClock = ({ size = 20, color = '#1B1A17', stroke = 2 }: P) => (
+export const IconClock = ({ size = 20, color = C.ink, stroke = 2 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={8.5} />
     <Path d="M12 7.5V12l3 2" />
   </Svg>
 );
 
-export const IconSearch = ({ size = 18, color = '#1B1A17', stroke = 2 }: P) => (
+export const IconSearch = ({ size = 18, color = C.ink, stroke = 2 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={11} cy={11} r={6.5} />
     <Path d="M20 20l-4.2-4.2" />
   </Svg>
 );
 
-export const IconHelp = ({ size = 16, color = '#1B1A17', stroke = 2 }: P) => (
+export const IconHelp = ({ size = 16, color = C.ink, stroke = 2 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={9} />
     <Path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.8M12 17.2h.01" />
   </Svg>
 );
 
-export const IconTarget =({ size = 20, color = '#1B1A17', stroke = 1.9 }: P) => (
+export const IconTarget = ({ size = 20, color = C.ink, stroke = 1.9 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={8.5} />
     <Circle cx={12} cy={12} r={4.5} />

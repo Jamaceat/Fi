@@ -18,8 +18,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PrimaryButton, T } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { DB_NAME, migrateDbIfNeeded } from '@/db/schema';
+import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
 import { AppProvider, useApp } from '@/state/app';
+import { styles as st } from '@/styles/screens/root-layout.styles';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,12 +43,12 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={st.root}>
       <SQLiteProvider databaseName={DB_NAME} onInit={migrateDbIfNeeded}>
         <AppProvider>
           <StatusBar style="dark" />
           <LockGate>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: st.scene }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="nuevo" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="ahorro" />
@@ -88,14 +90,14 @@ function LockGate({ children }: { children: ReactNode }) {
 
   if (unlocked) return children;
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg, justifyContent: 'center', padding: 24, gap: 20 }}>
-      <T serif w={600} size={32} style={{ textAlign: 'center' }}>
-        Mis finanzas
+    <View style={st.lock}>
+      <T serif w={600} size={32} style={st.center}>
+        {t('app.name')}
       </T>
-      <T size={14} color={C.muted} style={{ textAlign: 'center' }}>
-        La app está bloqueada.
+      <T size={14} color={C.muted} style={st.center}>
+        {t('lock.locked')}
       </T>
-      <PrimaryButton label="Desbloquear" onPress={tryUnlock} icon={false} />
+      <PrimaryButton label={t('lock.unlock')} onPress={tryUnlock} icon={false} />
     </View>
   );
 }

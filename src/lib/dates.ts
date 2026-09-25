@@ -1,4 +1,4 @@
-import { MONTHS, MONTHS_SHORT } from './format';
+import { t, tList } from '@/i18n';
 
 // Todas las fechas se guardan como texto ISO local 'YYYY-MM-DD'.
 
@@ -12,6 +12,9 @@ export const fromISO = (s: string) => {
 };
 
 export const todayISO = () => toISO(new Date());
+
+/** "2026-09" (mes 0–11) */
+export const monthKey = (year: number, month: number) => `${year}-${pad(month + 1)}`;
 
 export const lastDayOfMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
 
@@ -31,6 +34,26 @@ export const diffDays = (a: string, b: string) => Math.round((fromISO(a).getTime
 
 /** Lunes = 0 … domingo = 6 */
 export const weekdayOf = (iso: string) => (fromISO(iso).getDay() + 6) % 7;
+
+// ——— Nombres ———
+
+/** "Septiembre" (mes 0–11) */
+export const monthName = (month: number) => tList('dates.months')[month];
+
+/** "Sep" (mes 0–11), para etiquetas cortas con mayúscula. */
+export const monthAbbr = (month: number) => tList('dates.monthsAbbr')[month];
+
+/** "sep" (mes 0–11) */
+export const monthShort = (month: number) => tList('dates.monthsShort')[month];
+
+/** "miércoles" (lunes = 0) */
+export const weekdayName = (weekday: number) => tList('dates.weekdays')[weekday];
+
+/** "mié" (lunes = 0) */
+export const weekdayAbbr = (weekday: number) => tList('dates.weekdaysAbbr')[weekday];
+
+/** Iniciales de los días, lunes primero. */
+export const weekdayInitials = () => tList('dates.weekdaysInitial');
 
 // ——— Periodos ———
 // Un "mes" de la app empieza el día `startDay` (Ajustes → Tu mes empieza el día).
@@ -65,13 +88,32 @@ export const shiftPeriod = ({ year, month }: Period, k: number): Period => {
 
 export const samePeriod = (a: Period, b: Period) => a.year === b.year && a.month === b.month;
 
-export const periodName = (p: Period) => MONTHS[p.month];
+export const periodName = (p: Period) => monthName(p.month);
+
+/** "Septiembre 2026" */
+export const periodLabel = (p: Period) => `${periodName(p)} ${p.year}`;
 
 /** "22 sep" */
 export const shortDate = (iso: string) => {
   const d = fromISO(iso);
-  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  return t('dates.short', { day: d.getDate(), month: monthShort(d.getMonth()) });
 };
 
 /** "24 sep 2026" */
-export const longDate = (iso: string) => `${shortDate(iso)} ${fromISO(iso).getFullYear()}`;
+export const longDate = (iso: string) => t('dates.long', { date: shortDate(iso), year: fromISO(iso).getFullYear() });
+
+/** "24 de septiembre de 2026" */
+export const fullDate = (iso: string) => {
+  const d = fromISO(iso);
+  return t('dates.full', { day: d.getDate(), month: monthName(d.getMonth()).toLowerCase(), year: d.getFullYear() });
+};
+
+/** "Hoy", "Mañana", "Ayer" o null. */
+export const relativeDay = (iso: string, today: string) =>
+  iso === today
+    ? t('common.today')
+    : iso === addDays(today, 1)
+      ? t('common.tomorrow')
+      : iso === addDays(today, -1)
+        ? t('common.yesterday')
+        : null;

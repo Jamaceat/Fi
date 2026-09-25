@@ -1,16 +1,39 @@
 import { router } from 'expo-router';
 import { Fragment, useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import { CalendarCard } from '@/components/calendar';
 import { IconChevronLeft, IconChevronRight, IconClock, IconExpense, IconGear, IconIncome } from '@/components/icons';
-import { Card, LinkText, MovementRow, Progress, RoundButton, Row, Screen, SectionTitle, T, Tap, Toast } from '@/components/ui';
+import {
+  Card,
+  LinkText,
+  MovementRow,
+  Progress,
+  RoundButton,
+  Row,
+  Screen,
+  SectionTitle,
+  Stack,
+  T,
+  Tap,
+  Title,
+  Toast,
+} from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, listSavings, loadFixedData, type HomeBlock } from '@/db/repo';
+import { listMovements, listSavings, loadFixedData, type HomeBlock, type Movement } from '@/db/repo';
+import { t } from '@/i18n';
 import { periodName, shiftPeriod, shortDate } from '@/lib/dates';
 import { fixedItems, sum } from '@/lib/finance';
-import { fmt, plural, signed } from '@/lib/format';
+import { fmt, fmtBalance, fmtFlow, joinMeta, MASKED_AMOUNT, signed } from '@/lib/format';
 import { useApp, useLoad } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/inicio.styles';
+
+const pct = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
+
+/** "Fijo", "Ocasional" o "Pendiente". */
+const movementKind = (m: Movement) =>
+  m.fixed_id != null ? t('common.fixed') : m.paid ? t('common.occasional') : t('common.pending');
 
 export default function Inicio() {
   const { period, setPeriod, range, settings, holidays } = useApp();
@@ -29,7 +52,7 @@ export default function Inicio() {
     [range.from, range.to, settings.holiday],
   );
 
-  if (!data) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
+  if (!data) return <View style={layout.screen} />;
   const { movs, items, savings } = data;
 
   // Los ocasionales pendientes aún no mueven dinero.
@@ -51,8 +74,7 @@ export default function Inicio() {
   const monthSaved = savings.filter((e) => e.date >= range.from && e.date < range.to).reduce((s, e) => s + e.delta, 0);
 
   const hide = settings.hideAmounts && !revealed;
-  const money = (n: number) => (hide ? '$ ••••' : fmt(n));
-  const pct = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
+  const money = (n: number) => (hide ? MASKED_AMOUNT : fmt(n));
 
   const overBudget = settings.budgetAlert && inc > 0 && spentPct >= settings.budget;
 
@@ -62,28 +84,28 @@ export default function Inicio() {
       <Tap
         disabled={!settings.hideAmounts}
         onPress={() => setRevealed((r) => !r)}
-        accessibilityLabel="Balance del mes"
+        accessibilityLabel={t('home.hero.label')}
         style={st.hero}>
-        <View style={{ gap: 4 }}>
+        <Stack gap={4}>
           <T w={600} size={13} color={C.heroSub}>
-            Disponible este mes
+            {t('home.hero.available')}
           </T>
-          <T serif size={42} color={C.bg} tabular numberOfLines={1} adjustsFontSizeToFit style={{ letterSpacing: -1 }}>
-            {hide ? '$ ••••' : (inc - out < 0 ? '− ' : '') + fmt(inc - out)}
+          <T serif size={42} color={C.bg} tabular numberOfLines={1} adjustsFontSizeToFit style={st.heroAmount}>
+            {hide ? MASKED_AMOUNT : fmtBalance(inc - out)}
           </T>
-        </View>
-        <View style={{ gap: 8 }}>
+        </Stack>
+        <Stack gap={8}>
           <Progress pct={spentPct} color={C.outBar} track={C.heroTrack} />
           <T size={12.5} color={C.heroSub}>
-            {inc > 0 ? `Has gastado el ${spentPct} % de tus ingresos` : 'Aún no registras ingresos este mes'}
+            {inc > 0 ? t('home.hero.spent', { pct: spentPct }) : t('home.hero.noIncome')}
           </T>
-        </View>
+        </Stack>
         <Row gap={10}>
           <View style={st.tile}>
             <Row gap={6}>
               <IconIncome size={14} color={C.inText} />
               <T w={700} size={12.5} color={C.inText}>
-                Ingresos
+                {t('common.incomes')}
               </T>
             </Row>
             <T w={800} size={17} color={C.bg} tabular>
@@ -94,7 +116,7 @@ export default function Inicio() {
             <Row gap={6}>
               <IconExpense size={14} color={C.outText} />
               <T w={700} size={12.5} color={C.outText}>
-                Gastos
+                {t('common.expenses')}
               </T>
             </Row>
             <T w={800} size={17} color={C.bg} tabular>
@@ -106,20 +128,20 @@ export default function Inicio() {
     ),
 
     savings: (
-      <Tap onPress={() => router.push('/ahorro')} style={st.savings} accessibilityLabel="Abrir ahorro">
-        <View style={{ flex: 1, gap: 2 }}>
+      <Tap onPress={() => router.push('/ahorro')} style={st.savings} accessibilityLabel={t('home.savings.open')}>
+        <Stack gap={2} style={layout.fill}>
           <T w={700} size={12.5} color={C.inSub}>
-            Ahorro total
+            {t('home.savings.total')}
           </T>
-          <T serif size={24} color="#F4F8FB" tabular numberOfLines={1} adjustsFontSizeToFit>
+          <T serif size={24} color={C.inHeroText} tabular numberOfLines={1} adjustsFontSizeToFit>
             {money(balance)}
           </T>
           <T w={700} size={12.5} color={C.inSub}>
-            {hide ? 'Toca para ver' : `${signed(monthSaved)} este mes`}
+            {hide ? t('home.savings.tapToShow') : t('home.savings.thisMonth', { amount: signed(monthSaved) })}
           </T>
-        </View>
+        </Stack>
         <View style={st.savingsBtn}>
-          <IconChevronRight color="#F4F8FB" />
+          <IconChevronRight color={C.inHeroText} />
         </View>
       </Tap>
     ),
@@ -127,25 +149,25 @@ export default function Inicio() {
     pending: pendingIncome && (
       <Tap
         onPress={() => router.navigate({ pathname: '/fijos', params: { tab: 'ingresos' } })}
-        style={[st.pending]}
-        accessibilityLabel={`Ingreso fijo pendiente: ${pendingIncome.name}. Revisar`}>
-        <View style={st.pendingIcon}>
+        style={st.pending}
+        accessibilityLabel={t('home.pending.label', { name: pendingIncome.name })}>
+        <View style={[common.iconTile, st.pendingIcon]}>
           <IconClock color={C.inDark} />
         </View>
-        <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+        <Stack gap={2} style={layout.fillShrink}>
           <T w={700} size={12} color={C.warn}>
-            Ingreso fijo pendiente
+            {t('home.pending.title')}
           </T>
           <T w={700} size={14.5} numberOfLines={1}>
             {pendingIncome.name}
           </T>
           <T size={12.5} color={C.muted}>
-            Esperado el {shortDate(pendingIncome.occ.date)} · {money(pendingIncome.amount)}
+            {joinMeta(t('home.pending.expected', { date: shortDate(pendingIncome.occ.date) }), money(pendingIncome.amount))}
           </T>
-        </View>
+        </Stack>
         <View style={st.review}>
-          <T w={800} size={13} color="#FFFFFF">
-            Revisar
+          <T w={800} size={13} color={C.white}>
+            {t('home.pending.review')}
           </T>
         </View>
       </Tap>
@@ -154,39 +176,41 @@ export default function Inicio() {
     calendar: <CalendarCard />,
 
     breakdown: (
-      <Card style={{ padding: 18, gap: 16 }}>
-        <SectionTitle right={<LinkText onPress={() => router.navigate('/fijos')}>Ver fijos</LinkText>}>Gastos</SectionTitle>
+      <Card style={st.breakdown}>
+        <SectionTitle right={<LinkText onPress={() => router.navigate('/fijos')}>{t('home.breakdown.seeFixed')}</LinkText>}>
+          {t('common.expenses')}
+        </SectionTitle>
         <Breakdown
-          label="Fijos"
-          detail={`${fixedOut.filter((i) => i.paid).length} de ${fixedOut.length} pagados`}
+          label={t('common.fixedPlural')}
+          detail={t('home.breakdown.paidOf', { done: fixedOut.filter((i) => i.paid).length, total: fixedOut.length })}
           amount={money(sum(outFixed))}
           pct={pct(sum(outFixed), out)}
           color={C.out}
           track={C.outTrack}
         />
         <Breakdown
-          label="Ocasionales"
-          detail={plural(outOcc.length, 'movimiento', 'movimientos')}
+          label={t('common.occasionalPlural')}
+          detail={t('common.movementCount', { count: outOcc.length })}
           amount={money(sum(outOcc))}
           pct={pct(sum(outOcc), out)}
           color={C.outBarLight}
           track={C.outTrack}
         />
-        <View style={{ height: 1, backgroundColor: C.divider }} />
+        <View style={st.separator} />
         <T w={800} size={16}>
-          Ingresos
+          {t('common.incomes')}
         </T>
         <Breakdown
-          label="Fijos"
-          detail={`${fixedIn.filter((i) => i.paid).length} de ${fixedIn.length} recibidos`}
+          label={t('common.fixedPlural')}
+          detail={t('home.breakdown.receivedOf', { done: fixedIn.filter((i) => i.paid).length, total: fixedIn.length })}
           amount={money(sum(inFixed))}
           pct={pct(sum(inFixed), inc)}
           color={C.in}
           track={C.inTrack}
         />
         <Breakdown
-          label="Ocasionales"
-          detail={plural(inOcc.length, 'movimiento', 'movimientos')}
+          label={t('common.occasionalPlural')}
+          detail={t('common.movementCount', { count: inOcc.length })}
           amount={money(sum(inOcc))}
           pct={pct(sum(inOcc), inc)}
           color={C.inBarLight}
@@ -196,14 +220,14 @@ export default function Inicio() {
     ),
 
     recent: (
-      <View style={{ gap: 10 }}>
-        <SectionTitle right={<LinkText onPress={() => router.navigate('/movimientos')}>Ver todos</LinkText>}>
-          Últimos movimientos
+      <Stack gap={10}>
+        <SectionTitle right={<LinkText onPress={() => router.navigate('/movimientos')}>{t('home.recent.seeAll')}</LinkText>}>
+          {t('home.recent.title')}
         </SectionTitle>
-        <Card style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
+        <Card style={common.listCard}>
           {movs.length === 0 ? (
-            <T size={13.5} color={C.muted} style={{ paddingVertical: 16, textAlign: 'center' }}>
-              Sin movimientos este mes. Toca + para agregar uno.
+            <T size={13.5} color={C.muted} style={st.emptyRecent}>
+              {t('home.recent.empty')}
             </T>
           ) : (
             movs.slice(0, 4).map((m, i) => (
@@ -211,44 +235,41 @@ export default function Inicio() {
                 key={m.id}
                 first={i === 0}
                 name={m.name}
-                meta={`${m.fixed_id != null ? 'Fijo' : m.paid ? 'Ocasional' : 'Pendiente'} · ${shortDate(m.date)}`}
-                amount={hide ? '$ ••••' : (m.type === 'gasto' ? '− ' : '+ ') + fmt(m.amount)}
+                meta={joinMeta(movementKind(m), shortDate(m.date))}
+                amount={hide ? MASKED_AMOUNT : fmtFlow(m.amount, m.type === 'ingreso')}
                 income={m.type === 'ingreso'}
                 onPress={() => router.push({ pathname: '/nuevo', params: { id: String(m.id) } })}
               />
             ))
           )}
         </Card>
-      </View>
+      </Stack>
     ),
   };
 
   return (
     <Screen>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <View style={{ gap: 2 }}>
-          <T w={600} size={13} color={C.muted}>
-            Mis finanzas · {period.year}
-          </T>
-          <T serif w={600} size={32} style={{ letterSpacing: -0.5 }}>
-            {periodName(period)}
-          </T>
-        </View>
+      <Row style={layout.between}>
+        <Title kicker={t('home.kicker', { year: period.year })} title={periodName(period)} />
         <Row gap={8}>
-          <RoundButton label="Mes anterior" onPress={() => setPeriod(shiftPeriod(period, -1))}>
+          <RoundButton label={t('calendar.prevMonth')} onPress={() => setPeriod(shiftPeriod(period, -1))}>
             <IconChevronLeft />
           </RoundButton>
-          <RoundButton label="Mes siguiente" onPress={() => setPeriod(shiftPeriod(period, 1))}>
+          <RoundButton label={t('calendar.nextMonth')} onPress={() => setPeriod(shiftPeriod(period, 1))}>
             <IconChevronRight />
           </RoundButton>
-          <RoundButton label="Ajustes" onPress={() => router.push('/ajustes')}>
+          <RoundButton label={t('settings.title')} onPress={() => router.push('/ajustes')}>
             <IconGear />
           </RoundButton>
         </Row>
       </Row>
 
       {overBudget && (
-        <Toast warn title={`Llevas el ${spentPct} % de tus ingresos`} text={`Tu alerta está en el ${settings.budget} %.`} />
+        <Toast
+          warn
+          title={t('home.budget.title', { pct: spentPct })}
+          text={t('home.budget.text', { pct: settings.budget })}
+        />
       )}
 
       {settings.homeOrder.map((id) => blocks[id] && <Fragment key={id}>{blocks[id]}</Fragment>)}
@@ -258,8 +279,8 @@ export default function Inicio() {
 
 function Breakdown(p: { label: string; detail: string; amount: string; pct: number; color: string; track: string }) {
   return (
-    <View style={{ gap: 8 }}>
-      <Row style={{ justifyContent: 'space-between' }}>
+    <Stack gap={8}>
+      <Row style={layout.between}>
         <T w={700} size={13.5}>
           {p.label}{' '}
           <T w={500} size={13.5} color={C.muted}>
@@ -271,34 +292,6 @@ function Breakdown(p: { label: string; detail: string; amount: string; pct: numb
         </T>
       </Row>
       <Progress pct={p.pct} color={p.color} track={p.track} />
-    </View>
+    </Stack>
   );
 }
-
-const st = StyleSheet.create({
-  hero: { backgroundColor: C.hero, borderRadius: 24, padding: 22, gap: 18 },
-  tile: { flex: 1, backgroundColor: C.heroTile, borderRadius: 16, padding: 14, gap: 6 },
-  savings: {
-    backgroundColor: C.inDark,
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  savingsBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.in, alignItems: 'center', justifyContent: 'center' },
-  pending: {
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  pendingIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: C.inSoft, alignItems: 'center', justifyContent: 'center' },
-  review: { height: 36, paddingHorizontal: 12, borderRadius: 12, backgroundColor: C.in, justifyContent: 'center' },
-});

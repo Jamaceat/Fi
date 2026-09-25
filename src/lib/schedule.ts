@@ -1,4 +1,6 @@
-import { addDays, clampDay, fromISO, toISO, weekdayOf } from './dates';
+import { t } from '@/i18n';
+
+import { addDays, clampDay, fromISO, toISO, weekdayName, weekdayOf } from './dates';
 
 export type Kind = 'gasto' | 'ingreso';
 export type Preset =
@@ -6,21 +8,29 @@ export type Preset =
 export type Unit = 'dias' | 'semanas' | 'meses';
 export type HolidayRule = 'mantener' | 'antes' | 'despues';
 
-export const PRESETS: { id: Exclude<Preset, 'custom'>; name: string; desc: string; months?: number; perYear: number }[] = [
-  { id: 'semanal', name: 'Semanal', desc: 'Cada 7 días', perYear: 52 },
-  { id: 'quincenal', name: 'Quincenal', desc: 'Dos veces al mes', perYear: 24 },
-  { id: 'mensual', name: 'Mensual', desc: 'Una vez al mes', months: 1, perYear: 12 },
-  { id: 'bimestral', name: 'Bimestral', desc: 'Cada 2 meses', months: 2, perYear: 6 },
-  { id: 'trimestral', name: 'Trimestral', desc: 'Cada 3 meses', months: 3, perYear: 4 },
-  { id: 'semestral', name: 'Semestral', desc: 'Cada 6 meses', months: 6, perYear: 2 },
-  { id: 'anual', name: 'Anual', desc: 'Una vez al año', months: 12, perYear: 1 },
+export const PRESETS: { id: Exclude<Preset, 'custom'>; months?: number; perYear: number }[] = [
+  { id: 'semanal', perYear: 52 },
+  { id: 'quincenal', perYear: 24 },
+  { id: 'mensual', months: 1, perYear: 12 },
+  { id: 'bimestral', months: 2, perYear: 6 },
+  { id: 'trimestral', months: 3, perYear: 4 },
+  { id: 'semestral', months: 6, perYear: 2 },
+  { id: 'anual', months: 12, perYear: 1 },
 ];
 
-export const UNITS: { id: Unit; label: string; one: string; many: string }[] = [
-  { id: 'dias', label: 'Días', one: 'día', many: 'días' },
-  { id: 'semanas', label: 'Semanas', one: 'semana', many: 'semanas' },
-  { id: 'meses', label: 'Meses', one: 'mes', many: 'meses' },
-];
+export const UNITS: readonly Unit[] = ['dias', 'semanas', 'meses'];
+
+/** "Mensual", "Personalizada"… */
+export const presetName = (preset: Preset) => t(`schedule.presets.${preset}.name`);
+
+/** "Una vez al mes"… */
+export const presetDesc = (preset: Preset) => t(`schedule.presets.${preset}.desc`);
+
+/** "Semanas" (botón de unidad) */
+export const unitLabel = (unit: Unit) => t(`schedule.units.${unit}.label`);
+
+/** "semana" / "semanas" según `n`. */
+export const unitWord = (unit: Unit, n: number) => t(`schedule.units.${unit}.word`, { count: n });
 
 /** Lo mínimo para calcular fechas de un fijo. */
 export type Schedule = {
@@ -54,20 +64,18 @@ export const perYear = (s: Pick<Schedule, 'preset' | 'custom_n' | 'custom_unit'>
   return s.custom_unit === 'dias' ? 365 / n : s.custom_unit === 'semanas' ? 52 / n : 12 / n;
 };
 
-export const describePreset = (preset: Preset, n: number, unit: Unit) => {
-  if (preset !== 'custom') return PRESETS.find((p) => p.id === preset)!.name;
-  const u = UNITS.find((x) => x.id === unit)!;
-  return `Cada ${n} ${n === 1 ? u.one : u.many}`;
-};
+/** "Cada 2 semanas" */
+export const describeEvery = (n: number, unit: Unit) => t('schedule.every', { n, unit: unitWord(unit, n) });
 
-const WD_FULL = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+export const describePreset = (preset: Preset, n: number, unit: Unit) =>
+  preset === 'custom' ? describeEvery(n, unit) : presetName(preset);
 
 /** "Mensual · día 5", "Quincenal · días 15 y 30", "Semanal · los viernes" */
 export const describeSchedule = (s: Schedule) => {
   const base = describePreset(s.preset, s.custom_n, s.custom_unit);
-  if (s.preset === 'quincenal') return `${base} · días ${s.day1} y ${s.day2}`;
-  if (isWeekly(s)) return `${base} · los ${WD_FULL[s.weekday]}`;
-  return `${base} · día ${s.day}`;
+  if (s.preset === 'quincenal') return t('schedule.describe.twoDays', { base, day1: s.day1, day2: s.day2 });
+  if (isWeekly(s)) return t('schedule.describe.weekday', { base, weekday: weekdayName(s.weekday) });
+  return t('schedule.describe.day', { base, day: s.day });
 };
 
 export const isWeekly = (s: Pick<Schedule, 'preset' | 'custom_unit'>) =>

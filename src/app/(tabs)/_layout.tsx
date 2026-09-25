@@ -1,20 +1,22 @@
 import { router, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconBars, IconCalendar, IconHome, IconList, IconPlus } from '@/components/icons';
 import { T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
+import { t } from '@/i18n';
+import { styles as st } from '@/styles/screens/tabs-layout.styles';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 const ITEMS = [
-  { name: 'index', label: 'Inicio', Icon: IconHome },
-  { name: 'movimientos', label: 'Movimientos', Icon: IconList },
-  { name: '+', label: 'Nuevo movimiento', Icon: IconPlus },
-  { name: 'fijos', label: 'Fijos', Icon: IconCalendar },
-  { name: 'historial', label: 'Meses', Icon: IconBars },
+  { name: 'index', label: 'tabs.home', Icon: IconHome },
+  { name: 'movimientos', label: 'tabs.movements', Icon: IconList },
+  { name: '+', label: 'tabs.new', Icon: IconPlus },
+  { name: 'fijos', label: 'tabs.fixed', Icon: IconCalendar },
+  { name: 'historial', label: 'tabs.months', Icon: IconBars },
 ] as const;
 
 function BottomNav({ state, navigation }: TabBarProps) {
@@ -25,8 +27,8 @@ function BottomNav({ state, navigation }: TabBarProps) {
       {ITEMS.map(({ name, label, Icon }) => {
         if (name === '+') {
           return (
-            <Tap key={name} accessibilityLabel={label} onPress={() => router.push('/nuevo')} style={st.fab}>
-              <Icon size={24} color="#FFFFFF" />
+            <Tap key={name} accessibilityLabel={t(label)} onPress={() => router.push('/nuevo')} style={st.fab}>
+              <Icon size={24} color={C.white} />
             </Tap>
           );
         }
@@ -40,7 +42,7 @@ function BottomNav({ state, navigation }: TabBarProps) {
             style={st.item}>
             <Icon size={22} color={on ? C.ink : C.muted} stroke={1.9} />
             <T w={on ? 800 : 700} size={10.5} color={on ? C.ink : C.muted} numberOfLines={1}>
-              {label}
+              {t(label)}
             </T>
           </Tap>
         );
@@ -51,9 +53,7 @@ function BottomNav({ state, navigation }: TabBarProps) {
 
 export default function TabsLayout() {
   return (
-    <Tabs
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: C.bg } }}
-      tabBar={(props) => <BottomNav {...props} />}>
+    <Tabs screenOptions={{ headerShown: false, sceneStyle: st.scene }} tabBar={(props) => <BottomNav {...props} />}>
       <Tabs.Screen name="index" />
       <Tabs.Screen name="movimientos" />
       <Tabs.Screen name="fijos" />
@@ -61,30 +61,3 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
-
-const st = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 6,
-    paddingHorizontal: 12,
-    backgroundColor: C.card,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
-  },
-  item: { flex: 1, minWidth: 0, height: 52, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  fab: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: C.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: C.ink,
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-  },
-});

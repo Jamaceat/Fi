@@ -1,20 +1,35 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PanResponder, ScrollView, StyleSheet, View } from 'react-native';
+import { PanResponder, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeInLeft, FadeInRight, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FILTERS, Legend, MonthGrid, YearGrid } from '@/components/calendar';
+import { calendarFilters, Legend, MonthGrid, YearGrid } from '@/components/calendar';
 import { IconCalendar, IconChevronDown, IconChevronLeft, IconChevronRight, IconCollapse, IconPlus } from '@/components/icons';
-import { Card, MovementRow, RoundButton, Row, Segmented, T, Tap } from '@/components/ui';
+import { Card, MovementRow, RoundButton, Row, Segmented, Stack, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { getFixed, type Fixed } from '@/db/repo';
+import { t } from '@/i18n';
 import { hasMarks, loadDays, marksOf, monthCells, type CalFilter, type DayData } from '@/lib/calendar';
+import {
+  addDays,
+  fromISO,
+  fullDate,
+  monthName,
+  relativeDay,
+  shortDate,
+  toISO,
+  todayISO,
+  weekdayName,
+  weekdayOf,
+} from '@/lib/dates';
 import type { FixedItem } from '@/lib/finance';
-import { addDays, fromISO, shortDate, toISO, todayISO, weekdayOf } from '@/lib/dates';
-import { fmt, MONTHS, plural, WD_FULL } from '@/lib/format';
+import { APPROX, fmt, fmtFlow, joinMeta } from '@/lib/format';
+import { movementBadge } from '@/lib/labels';
 import { describeSchedule } from '@/lib/schedule';
 import { useApp, useLoad } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/calendario.styles';
 
 type Mode = 'mes' | 'año';
 type Cursor = { year: number; month: number };
@@ -48,6 +63,7 @@ export default function Calendario() {
   const [dir, setDir] = useState(0);
 
   const { year, month } = cursor;
+  const isMonth = mode === 'mes';
 
   useEffect(() => {
     needHolidays([year - 1, year, year + 1]);
@@ -111,90 +127,95 @@ export default function Calendario() {
     [go],
   );
 
-  const showingToday = mode === 'mes' ? today.slice(0, 7) === isoOf(year, month).slice(0, 7) : fromISO(today).getFullYear() === year;
+  const showingToday = isMonth ? today.slice(0, 7) === isoOf(year, month).slice(0, 7) : fromISO(today).getFullYear() === year;
   const monthPrefix = isoOf(year, month).slice(0, 8);
+  const monthLower = monthName(month).toLowerCase();
   const monthHolidays = [...holidays.entries()].filter(([d]) => d.startsWith(monthPrefix)).sort();
   const monthDays = [...(days?.entries() ?? [])].filter(([d]) => d.startsWith(monthPrefix));
   const countDays = (f: CalFilter) => monthDays.filter(([, v]) => hasMarks(marksOf(v, f))).length;
   const payments = fx ? monthPayments(monthDays, today) : [];
+  const fxKind = fx?.type ?? 'gasto';
 
   const enter = dir > 0 ? FadeInRight.duration(240) : dir < 0 ? FadeInLeft.duration(240) : FadeIn.duration(200);
   const years = Array.from({ length: 13 }, (_, i) => year - 6 + i);
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: insets.bottom + 32, gap: 14 }}>
+    <View style={layout.screen}>
+      <ScrollView contentContainerStyle={[st.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32 }]}>
         {/* Encabezado */}
-        <Animated.View entering={FadeInDown.duration(260)} style={{ gap: 12 }}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <RoundButton label="Cerrar calendario" onPress={() => router.back()}>
+        <Animated.View entering={FadeInDown.duration(260)} style={st.header}>
+          <Row style={layout.between}>
+            <RoundButton label={t('calendar.close')} onPress={() => router.back()}>
               <IconCollapse size={17} />
             </RoundButton>
             {!showingToday && (
-              <Tap onPress={goToday} style={st.todayBtn} accessibilityLabel="Ir a hoy">
+              <Tap onPress={goToday} style={st.todayBtn} accessibilityLabel={t('calendar.goToday')}>
                 <View style={st.todayDot} />
                 <T w={800} size={13.5}>
-                  Hoy
+                  {t('common.today')}
                 </T>
               </Tap>
             )}
           </Row>
           {fx && (
             <Row gap={12} style={st.fixedHead}>
-              <View style={[st.fixedAvatar, { backgroundColor: fx.type === 'ingreso' ? C.inSoft : C.outSoft }]}>
+              <View style={[st.fixedAvatar, fx.type === 'ingreso' ? st.fixedAvatarIn : st.fixedAvatarOut]}>
                 <IconCalendar size={20} color={fx.type === 'ingreso' ? C.inDark : C.outDark} />
               </View>
-              <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+              <Stack gap={2} style={layout.fillShrink}>
                 <T w={800} size={16} numberOfLines={1}>
                   {fx.name}
                 </T>
                 <T w={600} size={12.5} color={C.muted} numberOfLines={1}>
-                  {describeSchedule(fx)} · {fmt(fx.amount)}
+                  {joinMeta(describeSchedule(fx), fmt(fx.amount))}
                 </T>
-              </View>
+              </Stack>
             </Row>
           )}
-          <Row style={{ justifyContent: 'space-between' }}>
+          <Row style={layout.between}>
             <Tap
               onPress={() => {
                 setDir(0);
-                setMode(mode === 'mes' ? 'año' : 'mes');
+                setMode(isMonth ? 'año' : 'mes');
               }}
               accessibilityRole="button"
-              accessibilityLabel={mode === 'mes' ? 'Ver todos los meses del año' : 'Volver al mes'}
-              style={{ flexShrink: 1 }}>
+              accessibilityLabel={isMonth ? t('calendar.showYear') : t('calendar.backToMonth')}
+              style={st.modeToggle}>
               <T w={600} size={13} color={C.muted}>
-                {mode === 'mes' ? `${year} · toca para ver el año` : 'Elige un mes'}
+                {isMonth ? t('calendar.tapForYear', { year }) : t('calendar.pickMonth')}
               </T>
               <Row gap={8}>
-                <T serif w={600} size={32} style={{ letterSpacing: -0.5 }}>
-                  {mode === 'mes' ? MONTHS[month] : year}
+                <T serif w={600} size={32} style={st.title}>
+                  {isMonth ? monthName(month) : year}
                 </T>
-                <View style={{ transform: [{ rotate: mode === 'año' ? '180deg' : '0deg' }], marginTop: 6 }}>
+                <View style={[st.chevron, !isMonth && st.chevronOpen]}>
                   <IconChevronDown size={18} color={C.muted} />
                 </View>
               </Row>
             </Tap>
             <Row gap={8}>
-              <RoundButton label={mode === 'mes' ? 'Mes anterior' : 'Año anterior'} onPress={() => go(-1)}>
+              <RoundButton label={isMonth ? t('calendar.prevMonth') : t('calendar.prevYear')} onPress={() => go(-1)}>
                 <IconChevronLeft />
               </RoundButton>
-              <RoundButton label={mode === 'mes' ? 'Mes siguiente' : 'Año siguiente'} onPress={() => go(1)}>
+              <RoundButton label={isMonth ? t('calendar.nextMonth') : t('calendar.nextYear')} onPress={() => go(1)}>
                 <IconChevronRight />
               </RoundButton>
             </Row>
           </Row>
         </Animated.View>
 
-        {!fx && <Segmented options={FILTERS} value={filter} onChange={setFilter} />}
+        {!fx && <Segmented options={calendarFilters()} value={filter} onChange={setFilter} />}
 
-        {mode === 'mes' ? (
+        {isMonth ? (
           <>
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              <Stat color={C.holiday} bg={C.holidaySoft} text={plural(monthHolidays.length, 'festivo', 'festivos')} />
-              {view !== 'ingreso' && <Stat color={C.outDark} bg={C.outSoft} text={plural(countDays('gasto'), 'día de pago', 'días de pago')} />}
-              {view !== 'gasto' && <Stat color={C.inDark} bg={C.inSoft} text={plural(countDays('ingreso'), 'día de ingreso', 'días de ingreso')} />}
+            <Row gap={8} style={layout.wrap}>
+              <Stat color={C.holiday} bg={C.holidaySoft} text={t('calendar.stats.holidays', { count: monthHolidays.length })} />
+              {view !== 'ingreso' && (
+                <Stat color={C.outDark} bg={C.outSoft} text={t('calendar.stats.paymentDays', { count: countDays('gasto') })} />
+              )}
+              {view !== 'gasto' && (
+                <Stat color={C.inDark} bg={C.inSoft} text={t('calendar.stats.incomeDays', { count: countDays('ingreso') })} />
+              )}
             </Row>
 
             <View {...pan.panHandlers}>
@@ -205,14 +226,14 @@ export default function Calendario() {
             <Legend filter={view} />
 
             {fx && (
-              <View style={{ gap: 8 }}>
+              <Stack gap={8}>
                 <T w={800} size={16}>
-                  {fx.type === 'ingreso' ? 'Ingresos' : 'Pagos'} de {MONTHS[month].toLowerCase()}
+                  {t(`calendar.payments.title.${fxKind}`, { month: monthLower })}
                 </T>
-                <Card style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
+                <Card style={st.listCard}>
                   {payments.length === 0 ? (
-                    <T size={13.5} color={C.muted} style={{ textAlign: 'center', paddingVertical: 14 }}>
-                      Este fijo no tiene {fx.type === 'ingreso' ? 'ingresos' : 'pagos'} este mes.
+                    <T size={13.5} color={C.muted} style={st.emptyPayments}>
+                      {t(`calendar.payments.empty.${fxKind}`)}
                     </T>
                   ) : (
                     payments.map((p, i) => (
@@ -220,7 +241,7 @@ export default function Calendario() {
                     ))
                   )}
                 </Card>
-              </View>
+              </Stack>
             )}
 
             <DayDetail
@@ -234,30 +255,30 @@ export default function Calendario() {
             />
 
             {monthHolidays.length > 0 && (
-              <View style={{ gap: 8 }}>
+              <Stack gap={8}>
                 <T w={800} size={16}>
-                  Festivos de {MONTHS[month].toLowerCase()}
+                  {t('calendar.holidaysOf', { month: monthLower })}
                 </T>
-                <Card style={{ paddingHorizontal: 14, paddingVertical: 4 }}>
+                <Card style={st.listCard}>
                   {monthHolidays.map(([d, name], i) => (
-                    <Tap key={d} onPress={() => select(d)} style={[st.holRow, i > 0 && st.divider]}>
+                    <Tap key={d} onPress={() => select(d)} style={[st.holRow, i > 0 && common.divider]}>
                       <View style={st.holDate}>
                         <T w={800} size={15} color={C.holidayDark} tabular>
                           {fromISO(d).getDate()}
                         </T>
                       </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={layout.fillShrink}>
                         <T w={700} size={14.5} numberOfLines={1}>
                           {name}
                         </T>
                         <T size={12.5} color={C.muted}>
-                          {WD_FULL[weekdayOf(d)]}
+                          {weekdayName(weekdayOf(d))}
                         </T>
                       </View>
                     </Tap>
                   ))}
                 </Card>
-              </View>
+              </Stack>
             )}
           </>
         ) : (
@@ -265,7 +286,7 @@ export default function Calendario() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
+              contentContainerStyle={st.years}
               contentOffset={{ x: 6 * 70 - 120, y: 0 }}>
               {years.map((y) => {
                 const on = y === year;
@@ -274,8 +295,8 @@ export default function Calendario() {
                     key={y}
                     onPress={() => goYear(y)}
                     accessibilityState={{ selected: on }}
-                    style={[st.yearChip, on && { backgroundColor: C.ink, borderColor: C.ink }]}>
-                    <T w={800} size={14} color={on ? '#FFFFFF' : C.ink} tabular>
+                    style={[st.yearChip, on && st.yearChipOn]}>
+                    <T w={800} size={14} color={on ? C.white : C.ink} tabular>
                       {y}
                     </T>
                   </Tap>
@@ -307,14 +328,20 @@ function Stat({ text, color, bg }: { text: string; color: string; bg: string }) 
 
 /** Por qué la fecha real no es la nominal: cambio manual (caso aislado) o festivo/fin de semana. */
 const movedNote = (it: FixedItem) =>
-  it.moved ? ` · fecha cambiada (era el ${shortDate(it.planned)})` : it.occ.date !== it.occ.due ? ' · corrido por festivo' : '';
+  it.moved
+    ? t('calendar.note.moved', { date: shortDate(it.planned) })
+    : it.occ.date !== it.occ.due
+      ? t('calendar.note.holiday')
+      : '';
+
+type PaymentState = 'paid' | 'overdue' | 'today' | 'upcoming';
 
 type Payment = {
   key: string;
   date: string;
   name: string;
   amount: number;
-  state: 'paid' | 'overdue' | 'today' | 'upcoming';
+  state: PaymentState;
   note: string;
 };
 
@@ -324,7 +351,8 @@ function monthPayments(monthDays: [string, DayData][], today: string): Payment[]
   for (const [date, v] of monthDays) {
     for (const m of v.movs) {
       // Pagado en un día distinto al que le tocaba: se muestra donde realmente se pagó.
-      const note = m.fixed_due && m.fixed_due.slice(0, 7) !== date.slice(0, 7) ? ` · de ${shortDate(m.fixed_due)}` : '';
+      const note =
+        m.fixed_due && m.fixed_due.slice(0, 7) !== date.slice(0, 7) ? t('calendar.note.from', { date: shortDate(m.fixed_due) }) : '';
       out.push({ key: `m${m.id}`, date, name: m.name, amount: m.amount, state: 'paid', note });
     }
     for (const it of v.fixed) {
@@ -334,6 +362,9 @@ function monthPayments(monthDays: [string, DayData][], today: string): Payment[]
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
+
+const paymentLabel = (state: PaymentState, income: boolean) =>
+  t(`calendar.payments.state.${state}.${income ? 'ingreso' : 'gasto'}`);
 
 function PaymentRow({
   p,
@@ -349,37 +380,31 @@ function PaymentRow({
   onPress: () => void;
 }) {
   const isIn = fixed.type === 'ingreso';
-  const d = fromISO(p.date);
-  const label = {
-    paid: isIn ? 'Recibido' : 'Pagado',
-    overdue: isIn ? 'Sin recibir' : 'Vencido',
-    today: 'Hoy',
-    upcoming: 'Próximo',
-  }[p.state];
-  const color = p.state === 'paid' ? (isIn ? C.in : C.ink) : p.state === 'upcoming' ? C.muted : C.warn;
+  const paid = p.state === 'paid';
+  const label = paymentLabel(p.state, isIn);
+  const color = paid ? (isIn ? C.in : C.ink) : p.state === 'upcoming' ? C.muted : C.warn;
   return (
     <Tap
       onPress={onPress}
-      accessibilityLabel={`${p.name}, ${shortDate(p.date)}, ${label}`}
+      accessibilityLabel={t('calendar.payments.a11y', { name: p.name, date: shortDate(p.date), state: label })}
       accessibilityState={{ selected }}
-      style={[st.holRow, !first && st.divider]}>
-      <View style={[st.payDate, selected && { borderColor: C.ink }, p.state === 'paid' && { backgroundColor: isIn ? C.inSoft : C.outSoft }]}>
-        <T w={800} size={15} color={p.state === 'paid' ? (isIn ? C.inDark : C.outDark) : C.ink} tabular>
-          {d.getDate()}
+      style={[st.holRow, !first && common.divider]}>
+      <View style={[st.payDate, selected && st.payDateSelected, paid && (isIn ? st.payDatePaidIn : st.payDatePaidOut)]}>
+        <T w={800} size={15} color={paid ? (isIn ? C.inDark : C.outDark) : C.ink} tabular>
+          {fromISO(p.date).getDate()}
         </T>
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={layout.fillShrink}>
         <T w={700} size={14.5} numberOfLines={1}>
           {p.name}
         </T>
         <T w={700} size={12.5} color={color} numberOfLines={2}>
-          {label} · {WD_FULL[weekdayOf(p.date)]}
-          {p.note}
+          {joinMeta(label, weekdayName(weekdayOf(p.date)), p.note)}
         </T>
       </View>
       <T w={800} size={14.5} color={isIn ? C.in : C.out} tabular>
-        {p.state !== 'paid' && fixed.variable ? '≈ ' : ''}
-        {(isIn ? '+ ' : '− ') + fmt(p.amount)}
+        {!paid && fixed.variable ? APPROX : ''}
+        {fmtFlow(p.amount, isIn)}
       </T>
     </Tap>
   );
@@ -401,27 +426,28 @@ function DayDetail({
   canAdd?: boolean;
 }) {
   const d = fromISO(iso);
-  const show = (t: string) => filter === 'todos' || filter === t;
+  const show = (type: string) => filter === 'todos' || filter === type;
   const fixed = (day?.fixed ?? []).filter((it) => show(it.fixed.type));
   const movs = (day?.movs ?? []).filter((m) => show(m.type));
-  const total = (t: string) =>
-    movs.filter((m) => m.type === t).reduce((s, m) => s + m.amount, 0) +
-    fixed.filter((it) => it.fixed.type === t).reduce((s, it) => s + it.amount, 0);
+  const total = (type: string) =>
+    movs.filter((m) => m.type === type).reduce((s, m) => s + m.amount, 0) +
+    fixed.filter((it) => it.fixed.type === type).reduce((s, it) => s + it.amount, 0);
   const out = total('gasto');
   const inc = total('ingreso');
-  const rel = iso === today ? 'Hoy' : iso === addDays(today, 1) ? 'Mañana' : iso === addDays(today, -1) ? 'Ayer' : null;
+  const rel = relativeDay(iso, today);
+  const isToday = iso === today;
 
   return (
     <Animated.View entering={FadeInDown.duration(220)} style={st.detail}>
       <Row gap={14}>
-        <View style={[st.bigDay, iso === today ? { backgroundColor: C.ink } : holiday ? { backgroundColor: C.holidaySoft } : null]}>
-          <T serif w={600} size={26} color={iso === today ? '#FFFFFF' : holiday ? C.holidayDark : C.ink} tabular>
+        <View style={[st.bigDay, isToday ? st.bigDayToday : holiday ? st.bigDayHoliday : null]}>
+          <T serif w={600} size={26} color={isToday ? C.white : holiday ? C.holidayDark : C.ink} tabular>
             {d.getDate()}
           </T>
         </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <T w={800} size={16} style={{ textTransform: 'capitalize' }}>
-            {WD_FULL[weekdayOf(iso)]}
+        <Stack gap={2} style={layout.fill}>
+          <T w={800} size={16} style={st.weekday}>
+            {weekdayName(weekdayOf(iso))}
             {rel ? (
               <T w={700} size={13} color={C.muted}>
                 {'  '}· {rel}
@@ -429,17 +455,17 @@ function DayDetail({
             ) : null}
           </T>
           <T size={13} color={C.muted}>
-            {d.getDate()} de {MONTHS[d.getMonth()].toLowerCase()} de {d.getFullYear()}
+            {fullDate(iso)}
           </T>
-        </View>
+        </Stack>
       </Row>
 
       {holiday && (
         <Row gap={10} style={st.holBanner}>
           <View style={st.holBannerDot} />
-          <View style={{ flex: 1 }}>
+          <View style={layout.fill}>
             <T w={700} size={11.5} color={C.holiday}>
-              Festivo en Colombia
+              {t('calendar.day.holiday')}
             </T>
             <T w={800} size={14} color={C.holidayDark}>
               {holiday}
@@ -449,8 +475,8 @@ function DayDetail({
       )}
 
       {fixed.length + movs.length === 0 ? (
-        <T size={13.5} color={C.muted} style={{ textAlign: 'center', paddingVertical: 10 }}>
-          {filter === 'todos' ? 'Nada registrado este día.' : `Sin ${filter === 'gasto' ? 'gastos' : 'ingresos'} este día.`}
+        <T size={13.5} color={C.muted} style={st.emptyDay}>
+          {t(`calendar.day.empty.${filter}`)}
         </T>
       ) : (
         <View>
@@ -461,10 +487,18 @@ function DayDetail({
                 key={`f${it.fixed.id}${it.occ.due}`}
                 first={i === 0}
                 name={it.name}
-                meta={`${it.fixed.category} · Fijo${movedNote(it)}`}
-                amount={(isIn ? '+ ' : '− ') + fmt(it.amount)}
+                meta={joinMeta(it.fixed.category, t('common.fixed'), movedNote(it))}
+                amount={fmtFlow(it.amount, isIn)}
                 income={isIn}
-                badge={it.paid ? (isIn ? 'Recibido' : 'Pagado') : isIn ? 'Por recibir' : 'Pendiente'}
+                badge={
+                  it.paid
+                    ? isIn
+                      ? t('common.received')
+                      : t('common.paid')
+                    : isIn
+                      ? t('common.toReceive')
+                      : t('common.pending')
+                }
                 onPress={() => router.push({ pathname: '/fijo/[id]', params: { id: String(it.fixed.id) } })}
               />
             );
@@ -474,22 +508,22 @@ function DayDetail({
               key={m.id}
               first={fixed.length === 0 && i === 0}
               name={m.name}
-              meta={`${m.category}${m.extraordinary ? ' · extraordinario' : ''}`}
-              amount={(m.type === 'gasto' ? '− ' : '+ ') + fmt(m.amount)}
+              meta={joinMeta(m.category, !!m.extraordinary && t('common.extraordinaryLower'))}
+              amount={fmtFlow(m.amount, m.type === 'ingreso')}
               income={m.type === 'ingreso'}
-              badge={m.fixed_id != null ? 'Fijo' : m.paid ? 'Ocasional' : m.type === 'gasto' ? 'Pendiente' : 'Por recibir'}
+              badge={movementBadge(m)}
               onPress={() => router.push({ pathname: '/nuevo', params: { id: String(m.id) } })}
             />
           ))}
-          <Row gap={16} style={[st.divider, { paddingTop: 12, justifyContent: 'flex-end' }]}>
+          <Row gap={16} style={[common.divider, st.totals]}>
             {out > 0 && (
               <T w={800} size={13.5} color={C.out} tabular>
-                − {fmt(out)}
+                {fmtFlow(out, false)}
               </T>
             )}
             {inc > 0 && (
               <T w={800} size={13.5} color={C.in} tabular>
-                + {fmt(inc)}
+                {fmtFlow(inc, true)}
               </T>
             )}
           </Row>
@@ -502,71 +536,13 @@ function DayDetail({
             router.push({ pathname: '/nuevo', params: { date: iso, ...(filter === 'ingreso' ? { kind: 'ingreso' } : {}) } })
           }
           style={st.addBtn}
-          accessibilityLabel="Agregar movimiento en este día">
+          accessibilityLabel={t('calendar.day.addLabel')}>
           <IconPlus size={16} />
           <T w={800} size={14}>
-            Agregar movimiento
+            {t('calendar.day.add')}
           </T>
         </Tap>
       )}
     </Animated.View>
   );
 }
-
-const st = StyleSheet.create({
-  fixedHead: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 12 },
-  fixedAvatar: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  payDate: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    backgroundColor: C.chip,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  todayBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    height: 40,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  todayDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.ink },
-  gridCard: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 24, paddingHorizontal: 6, paddingVertical: 12 },
-  stat: { height: 30, paddingHorizontal: 12, borderRadius: 15, justifyContent: 'center' },
-  detail: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 22, padding: 16, gap: 12 },
-  bigDay: { width: 54, height: 54, borderRadius: 18, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center' },
-  holBanner: { backgroundColor: C.holidaySoft, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 },
-  holBannerDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.holiday },
-  addBtn: {
-    height: 46,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: C.ring,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  divider: { borderTopWidth: 1, borderTopColor: C.divider },
-  holRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
-  holDate: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.holidaySoft, alignItems: 'center', justifyContent: 'center' },
-  yearChip: {
-    height: 40,
-    minWidth: 62,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

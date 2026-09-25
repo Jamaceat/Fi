@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 
 import { DatePicker } from '@/components/calendar';
 import {
@@ -26,21 +26,28 @@ import {
   SectionTitle,
   Segmented,
   Sheet,
+  Stack,
   T,
   Tap,
 } from '@/components/ui';
-import { C, F } from '@/constants/theme';
+import { C } from '@/constants/theme';
 import { clearOverride, loadFixedData, markPaid, saveOverride, unmark } from '@/db/repo';
-import { longDate, periodName, shortDate } from '@/lib/dates';
+import { t } from '@/i18n';
+import { longDate, periodLabel, shortDate } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
-import { cleanAmount, dots, fmt, plural } from '@/lib/format';
+import { APPROX, cleanAmount, dots, fmt } from '@/lib/format';
 import { describeSchedule } from '@/lib/schedule';
 import { useApp, useLoad } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/fijos.styles';
 
 type Tab = 'gastos' | 'ingresos';
 
-const norm = (t: string) =>
-  t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+/** Minúsculas y sin tildes, para buscar sin importar cómo se escribió. */
+const norm = (text: string) =>
+  text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+const isIncome = (item: FixedItem | undefined) => item?.fixed.type === 'ingreso';
 
 export default function Fijos() {
   const db = useSQLiteContext();
@@ -130,46 +137,49 @@ export default function Fijos() {
   const gastos = gastosAll.filter(match);
   const ingresos = ingresosAll.filter(match);
   const isGastos = tab === 'gastos';
+  const other: Tab = isGastos ? 'ingresos' : 'gastos';
 
   let searchStatus = '';
   if (q) {
     const here = isGastos ? gastos.length : ingresos.length;
-    const other = isGastos ? ingresos.length : gastos.length;
-    searchStatus = `${plural(here, 'resultado', 'resultados')} en ${isGastos ? 'gastos' : 'ingresos'}`;
-    if (other) searchStatus += ` · ${other} en ${isGastos ? 'ingresos' : 'gastos'}`;
+    const there = isGastos ? ingresos.length : gastos.length;
+    searchStatus = t(`fixed.search.results.${tab}`, { count: here });
+    if (there) searchStatus += t(`fixed.search.otherResults.${other}`, { count: there });
   }
 
   const total = sum(gastosAll);
   const paidSum = sum(gastosAll.filter((i) => i.paid));
   const incTotal = sum(ingresosAll);
   const incPaid = sum(ingresosAll.filter((i) => i.paid));
-  const emptyHint = q ? 'Prueba con otra palabra o revisa la otra pestaña' : 'Toca Agregar para crear uno';
+  const emptyHint = q ? t('fixed.empty.searchHint') : t('fixed.empty.addHint');
+  const confirmingIncome = isIncome(confirming?.item);
+  const adjustingIncome = isIncome(adjusting?.item);
 
   return (
     <Screen>
       <Header
-        kicker={`${periodName(period)} ${period.year}`}
-        title="Fijos"
+        kicker={periodLabel(period)}
+        title={t('fixed.title')}
         right={
           <Row gap={8}>
             <RoundButton
-              label={searchOpen ? 'Ocultar buscador' : 'Buscar en fijos'}
+              label={searchOpen ? t('fixed.search.hide') : t('fixed.search.show')}
               onPress={() => {
                 setSearchOpen(!searchOpen);
                 setQuery('');
               }}
               bg={searchOpen ? C.in : C.card}
               border={searchOpen ? C.in : C.line}>
-              <IconSearch color={searchOpen ? '#FFFFFF' : C.ink} />
+              <IconSearch color={searchOpen ? C.white : C.ink} />
             </RoundButton>
             <Tap
-              style={st.add}
+              style={common.pillBtn}
               onPress={() =>
                 router.push({ pathname: '/fijo/[id]', params: { id: 'nuevo', kind: isGastos ? 'gasto' : 'ingreso' } })
               }>
               <IconPlus size={16} />
               <T w={800} size={13.5}>
-                Agregar
+                {t('common.add')}
               </T>
             </Tap>
           </Row>
@@ -177,19 +187,19 @@ export default function Fijos() {
       />
 
       {searchOpen && (
-        <View style={{ gap: 6 }}>
+        <Stack gap={6}>
           <Row gap={8} style={st.search}>
             <IconSearch color={C.muted} />
             <TextInput
               autoFocus
               value={query}
-              onChangeText={(t) => setQuery(t.slice(0, 40))}
-              placeholder={isGastos ? 'Buscar gasto fijo' : 'Buscar ingreso fijo'}
-              placeholderTextColor="#8A847A"
-              style={{ flex: 1, fontFamily: F[600], fontSize: 15, color: C.ink, padding: 0 }}
+              onChangeText={(text) => setQuery(text.slice(0, 40))}
+              placeholder={t(`fixed.search.placeholder.${tab}`)}
+              placeholderTextColor={C.placeholder}
+              style={st.searchInput}
             />
             {!!q && (
-              <Tap onPress={() => setQuery('')} accessibilityLabel="Borrar búsqueda" style={{ padding: 12 }}>
+              <Tap onPress={() => setQuery('')} accessibilityLabel={t('fixed.search.clear')} style={st.searchClear}>
                 <IconClose size={16} color={C.muted} />
               </Tap>
             )}
@@ -199,13 +209,13 @@ export default function Fijos() {
               {searchStatus}
             </T>
           )}
-        </View>
+        </Stack>
       )}
 
       <Segmented
         options={[
-          { id: 'gastos', label: 'Gastos', extra: String(gastos.length) },
-          { id: 'ingresos', label: 'Ingresos', extra: String(ingresos.length), activeFg: C.inDark },
+          { id: 'gastos', label: t('common.expenses'), extra: String(gastos.length) },
+          { id: 'ingresos', label: t('common.incomes'), extra: String(ingresos.length), activeFg: C.inDark },
         ]}
         value={tab}
         onChange={setTab}
@@ -214,32 +224,32 @@ export default function Fijos() {
       {isGastos ? (
         <>
           <View style={st.hero}>
-            <Row style={{ justifyContent: 'space-between' }}>
+            <Row style={layout.between}>
               <T w={600} size={13} color={C.heroSub}>
-                Pagado este mes
+                {t('fixed.expenses.paidThisMonth')}
               </T>
               <T w={700} size={13} color={C.heroSub}>
-                {gastosAll.filter((i) => i.paid).length} de {gastosAll.length} pagos
+                {t('fixed.expenses.paidCount', { done: gastosAll.filter((i) => i.paid).length, total: gastosAll.length })}
               </T>
             </Row>
-            <T serif size={36} color={C.bg} tabular numberOfLines={1} adjustsFontSizeToFit style={{ letterSpacing: -0.5 }}>
+            <T serif size={36} color={C.bg} tabular numberOfLines={1} adjustsFontSizeToFit style={st.heroAmount}>
               {fmt(paidSum)}
             </T>
             <Progress pct={total ? (paidSum / total) * 100 : 0} color={C.outBar} track={C.heroTrack} />
-            <Row style={{ justifyContent: 'space-between' }}>
+            <Row style={layout.between}>
               <T size={13} color={C.heroSub}>
-                de {fmt(total)}
+                {t('fixed.ofTotal', { amount: fmt(total) })}
               </T>
               <T w={700} size={13} color={C.outText}>
-                Pendiente {fmt(total - paidSum)}
+                {t('fixed.expenses.pending', { amount: fmt(total - paidSum) })}
               </T>
             </Row>
           </View>
 
-          <View style={{ gap: 10 }}>
-            <SectionTitle>Gastos fijos</SectionTitle>
+          <Stack gap={10}>
+            <SectionTitle>{t('fixed.expenses.title')}</SectionTitle>
             {gastos.length === 0 ? (
-              <EmptyBox title={q ? 'Sin gastos que coincidan' : 'Sin gastos fijos este mes'} hint={emptyHint} />
+              <EmptyBox title={q ? t('fixed.empty.noMatch.gastos') : t('fixed.empty.none.gastos')} hint={emptyHint} />
             ) : (
               <View style={st.list}>
                 {gastos.map((item, i) => (
@@ -253,25 +263,25 @@ export default function Fijos() {
                 ))}
               </View>
             )}
-          </View>
+          </Stack>
         </>
       ) : (
-        <View style={{ gap: 10 }}>
+        <Stack gap={10}>
           <SectionTitle
             right={
               <T w={700} size={13} color={C.muted}>
-                {ingresosAll.filter((i) => i.paid).length} de {ingresosAll.length} recibidos
+                {t('fixed.incomes.receivedCount', { done: ingresosAll.filter((i) => i.paid).length, total: ingresosAll.length })}
               </T>
             }>
-            Ingresos fijos
+            {t('fixed.incomes.title')}
           </SectionTitle>
           <View style={st.incHero}>
-            <Row style={{ justifyContent: 'space-between' }}>
+            <Row style={layout.between}>
               <T w={700} size={13} color={C.inDark}>
-                Recibido este mes
+                {t('fixed.incomes.receivedThisMonth')}
               </T>
               <T w={700} size={13} color={C.inDark}>
-                de {fmt(incTotal)}
+                {t('fixed.ofTotal', { amount: fmt(incTotal) })}
               </T>
             </Row>
             <T serif w={600} size={28} color={C.inDark} tabular numberOfLines={1} adjustsFontSizeToFit>
@@ -280,7 +290,7 @@ export default function Fijos() {
             <Progress pct={incTotal ? (incPaid / incTotal) * 100 : 0} color={C.in} track={C.inTrack2} />
           </View>
           {ingresos.length === 0 && (
-            <EmptyBox title={q ? 'Sin ingresos que coincidan' : 'Sin ingresos fijos este mes'} hint={emptyHint} />
+            <EmptyBox title={q ? t('fixed.empty.noMatch.ingresos') : t('fixed.empty.none.ingresos')} hint={emptyHint} />
           )}
           {ingresos.map((item) => (
             <IngresoCard
@@ -290,27 +300,27 @@ export default function Fijos() {
               onOpen={() => openItem(item)}
             />
           ))}
-        </View>
+        </Stack>
       )}
 
       <Sheet
         visible={!!confirming}
         onClose={() => setConfirming(null)}
-        title={confirming ? `Confirmar ${confirming.item.name}` : ''}>
+        title={confirming ? t('fixed.confirm.title', { name: confirming.item.name }) : ''}>
         <T size={13} color={C.muted2}>
-          Este fijo tiene monto variable. ¿Cuánto fue esta vez?
+          {t('fixed.confirm.text')}
         </T>
-        <View style={st.amountBox}>
+        <View style={common.amountBox}>
           <AmountField
             size={40}
             autoFocus
             value={dots(confirming?.input ?? '')}
-            onChangeText={(t) => confirming && setConfirming({ ...confirming, input: cleanAmount(t) })}
+            onChangeText={(text) => confirming && setConfirming({ ...confirming, input: cleanAmount(text) })}
           />
         </View>
         <PrimaryButton
-          label={confirming?.item.fixed.type === 'ingreso' ? 'Marcar como recibido' : 'Marcar como pagado'}
-          bg={confirming?.item.fixed.type === 'ingreso' ? C.in : C.ink}
+          label={confirmingIncome ? t('fixed.markReceived') : t('fixed.markPaid')}
+          bg={confirmingIncome ? C.in : C.ink}
           disabled={!Number(confirming?.input)}
           onPress={confirmVariable}
         />
@@ -319,23 +329,22 @@ export default function Fijos() {
       <Sheet
         visible={!!adjusting}
         onClose={() => setAdjusting(null)}
-        title={adjusting ? `${adjusting.item.name} · ${shortDate(adjusting.item.planned)}` : ''}>
+        title={adjusting ? t('fixed.adjust.title', { name: adjusting.item.name, date: shortDate(adjusting.item.planned) }) : ''}>
         <T size={13} color={C.muted2}>
-          Cambia el monto o la fecha solo esta vez. Los demás pagos siguen igual (
-          {fmt(adjusting?.item.base ?? 0)}).
+          {t('fixed.adjust.text', { amount: fmt(adjusting?.item.base ?? 0) })}
         </T>
-        <View style={st.amountBox}>
+        <View style={common.amountBox}>
           <AmountField
             size={40}
             value={dots(adjusting?.input ?? '')}
-            onChangeText={(t) => adjusting && setAdjusting({ ...adjusting, input: cleanAmount(t) })}
+            onChangeText={(text) => adjusting && setAdjusting({ ...adjusting, input: cleanAmount(text) })}
           />
         </View>
-        <View style={{ gap: 6 }}>
+        <Stack gap={6}>
           <T w={800} size={14}>
-            {adjusting?.item.fixed.type === 'ingreso' ? 'Fecha en que llega' : 'Fecha de pago'}
+            {adjustingIncome ? t('fixed.adjust.dateIncome') : t('fixed.adjust.dateExpense')}
           </T>
-          <Tap onPress={() => setDateOpen((o) => !o)} style={st.dateBtn} accessibilityLabel="Cambiar la fecha de esta vez">
+          <Tap onPress={() => setDateOpen((o) => !o)} style={common.dateBtn} accessibilityLabel={t('fixed.adjust.changeDate')}>
             <T w={600} size={14.5}>
               {adjusting ? longDate(adjusting.date) : ''}
             </T>
@@ -343,7 +352,7 @@ export default function Fijos() {
           </Tap>
           {adjusting && adjusting.date !== adjusting.item.planned && (
             <T size={12.5} color={C.warn}>
-              Le tocaba el {shortDate(adjusting.item.planned)}. Solo esta vez cambia de fecha.
+              {t('fixed.adjust.moved', { date: shortDate(adjusting.item.planned) })}
             </T>
           )}
           {dateOpen && adjusting && (
@@ -356,16 +365,16 @@ export default function Fijos() {
               }}
             />
           )}
-        </View>
+        </Stack>
         <PrimaryButton
-          label="Guardar solo esta vez"
-          bg={adjusting?.item.fixed.type === 'ingreso' ? C.in : C.ink}
+          label={t('fixed.adjust.save')}
+          bg={adjustingIncome ? C.in : C.ink}
           disabled={!Number(adjusting?.input)}
           onPress={saveAdjust}
         />
-        <Row style={{ justifyContent: 'space-between' }}>
+        <Row style={layout.between}>
           {adjusting && (adjusting.item.adjusted || adjusting.item.moved) ? (
-            <LinkText onPress={resetAdjust}>Quitar el ajuste</LinkText>
+            <LinkText onPress={resetAdjust}>{t('fixed.adjust.reset')}</LinkText>
           ) : (
             <View />
           )}
@@ -375,7 +384,7 @@ export default function Fijos() {
               setAdjusting(null);
               if (item) editFixed(item);
             }}>
-            Editar el fijo
+            {t('fixed.adjust.edit')}
           </LinkText>
         </Row>
       </Sheet>
@@ -385,15 +394,18 @@ export default function Fijos() {
 
 const adjustNote = (item: FixedItem) =>
   item.moved && item.adjusted
-    ? 'Monto y fecha cambiados solo esta vez'
+    ? t('fixed.note.both')
     : item.moved
-      ? `Fecha cambiada solo esta vez (era el ${shortDate(item.planned)})`
+      ? t('fixed.note.moved', { date: shortDate(item.planned) })
       : item.adjusted
-        ? 'Monto ajustado solo esta vez'
+        ? t('fixed.note.adjusted')
         : '';
 
 const editFixed = (item: FixedItem) =>
   router.push({ pathname: '/fijo/[id]', params: { id: String(item.fixed.id) } });
+
+/** Monto de la fila: con ≈ si es variable y aún no se confirma. */
+const itemAmount = (item: FixedItem) => (!item.paid && item.fixed.variable ? APPROX : '') + fmt(item.amount);
 
 function GastoRow({
   item,
@@ -407,31 +419,31 @@ function GastoRow({
   onOpen: () => void;
 }) {
   const p = item.paid;
+  const date = shortDate(item.occ.date);
   return (
-    <Row gap={12} style={[{ paddingVertical: 10 }, !first && { borderTopWidth: 1, borderTopColor: C.divider }]}>
+    <Row gap={12} style={[st.gastoRow, !first && common.divider]}>
       <Tap
         onPress={onToggle}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: p }}
-        accessibilityLabel={`${p ? 'Desmarcar' : 'Marcar'} ${item.name} como pagado`}
-        style={[st.check, { borderColor: p ? C.ink : C.ring, backgroundColor: p ? C.ink : C.card }]}>
-        {p && <IconCheck size={18} color="#FFFFFF" />}
+        accessibilityLabel={t(p ? 'ui.unmarkPaid' : 'ui.markPaid', { name: item.name })}
+        style={[st.check, p ? st.checkOn : st.checkOff]}>
+        {p && <IconCheck size={18} color={C.white} />}
       </Tap>
-      <Tap onPress={onOpen} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
-        <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+      <Tap onPress={onOpen} style={st.gastoBody}>
+        <Stack gap={2} style={layout.fillShrink}>
           <T w={700} size={15} numberOfLines={1}>
             {item.name}
           </T>
           <T w={600} size={12.5} color={p ? C.muted : C.warn}>
-            {p ? `Pagado · ${shortDate(item.occ.date)}` : `Vence el ${shortDate(item.occ.date)}`}
+            {p ? t('fixed.expenses.paidOn', { date }) : t('fixed.expenses.dueOn', { date })}
           </T>
           <T w={700} size={11.5} color={C.muted} numberOfLines={1}>
             {adjustNote(item) || describeSchedule(item.fixed)}
           </T>
-        </View>
+        </Stack>
         <T w={800} size={15} tabular>
-          {!p && item.fixed.variable ? '≈ ' : ''}
-          {fmt(item.amount)}
+          {itemAmount(item)}
         </T>
         <IconChevronRight size={16} color={C.faint} />
       </Tap>
@@ -442,110 +454,57 @@ function GastoRow({
 function IngresoCard({ item, onToggle, onOpen }: { item: FixedItem; onToggle: () => void; onOpen: () => void }) {
   const p = item.paid;
   const statusColor = p ? C.in : C.warn;
+  const date = shortDate(item.occ.date);
+  const note = adjustNote(item);
   return (
     <View style={st.incCard}>
-      <Row gap={12} style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ gap: 3, flex: 1 }}>
+      <Row gap={12} style={layout.betweenStart}>
+        <Stack gap={3} style={layout.fill}>
           <T w={700} size={15}>
             {item.name}
           </T>
           <Row gap={6}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
+            <View style={[st.statusDot, { backgroundColor: statusColor }]} />
             <T w={700} size={12.5} color={statusColor}>
-              {p ? `Recibido el ${shortDate(item.occ.date)}` : `Pendiente · esperado el ${shortDate(item.occ.date)}`}
+              {p ? t('fixed.incomes.receivedOn', { date }) : t('fixed.incomes.expectedOn', { date })}
             </T>
           </Row>
-        </View>
+        </Stack>
         <Tap
           onPress={onOpen}
           disabled={p}
-          accessibilityLabel={`Cambiar monto de ${item.name} solo esta fecha`}
-          style={{ alignItems: 'flex-end', gap: 2, minHeight: 44, justifyContent: 'center' }}>
+          accessibilityLabel={t('fixed.incomes.changeAmount', { name: item.name })}
+          style={st.incAmount}>
           <T w={800} size={16} color={C.in} tabular>
-            {!p && item.fixed.variable ? '≈ ' : ''}
-            {fmt(item.amount)}
+            {itemAmount(item)}
           </T>
-          {!!adjustNote(item) && (
+          {!!note && (
             <T w={700} size={11} color={C.muted}>
-              {adjustNote(item)}
+              {note}
             </T>
           )}
         </Tap>
       </Row>
-      <Tap onPress={() => editFixed(item)} style={st.periodBtn} accessibilityLabel={`Editar ${item.name}`}>
+      <Tap onPress={() => editFixed(item)} style={st.periodBtn} accessibilityLabel={t('fixed.incomes.editLabel', { name: item.name })}>
         <IconRefresh color={C.inDark} stroke={1.9} />
-        <View style={{ flex: 1, gap: 1 }}>
+        <Stack gap={1} style={layout.fill}>
           <T w={700} size={11.5} color={C.muted}>
-            Periodicidad
+            {t('fixed.incomes.frequency')}
           </T>
           <T w={800} size={13.5}>
             {describeSchedule(item.fixed)}
           </T>
-        </View>
+        </Stack>
         <T w={800} size={13} color={C.in}>
-          Editar
+          {t('common.edit')}
         </T>
       </Tap>
-      <Tap
-        onPress={onToggle}
-        accessibilityState={{ checked: p }}
-        style={[st.receive, { backgroundColor: p ? C.in : C.card }]}>
-        {p && <IconCheck size={18} color="#FFFFFF" />}
-        <T w={800} size={14} color={p ? '#FFFFFF' : C.in}>
-          {p ? 'Recibido' : 'Marcar como recibido'}
+      <Tap onPress={onToggle} accessibilityState={{ checked: p }} style={[st.receive, p ? st.receiveOn : st.receiveOff]}>
+        {p && <IconCheck size={18} color={C.white} />}
+        <T w={800} size={14} color={p ? C.white : C.in}>
+          {p ? t('common.received') : t('fixed.markReceived')}
         </T>
       </Tap>
     </View>
   );
 }
-
-const st = StyleSheet.create({
-  add: {
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: 22,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  search: {
-    height: 48,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: C.in,
-    backgroundColor: C.card,
-    paddingLeft: 14,
-    paddingRight: 4,
-  },
-  hero: { backgroundColor: C.hero, borderRadius: 24, padding: 20, gap: 14 },
-  list: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4 },
-  check: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  incHero: { backgroundColor: C.inSoft, borderRadius: 20, padding: 16, gap: 10 },
-  incCard: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
-  periodBtn: { minHeight: 44, borderRadius: 12, backgroundColor: C.bg, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  receive: {
-    height: 46,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: C.in,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  amountBox: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.line, paddingVertical: 14 },
-  dateBtn: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-  },
-});

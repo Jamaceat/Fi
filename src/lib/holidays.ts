@@ -1,5 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { t } from '@/i18n';
+
 // Festivos de Colombia desde Nager.Date (https://date.nager.at), guardados en SQLite.
 // Cada año se descarga una sola vez y se vuelve a pedir cuando su caché supera la
 // vigencia de Ajustes. Si no hay red se siguen usando los datos guardados.
@@ -30,7 +32,7 @@ async function fetchYear(year: number): Promise<NagerHoliday[]> {
   try {
     const res = await fetch(`${API}/${year}/${COUNTRY}`, { signal: ctrl.signal });
     if (res.status === 204) return [];
-    if (!res.ok) throw new Error(`Nager.Date respondió ${res.status}`);
+    if (!res.ok) throw new Error(t('holidays.httpError', { status: res.status }));
     return (await res.json()) as NagerHoliday[];
   } finally {
     clearTimeout(timer);

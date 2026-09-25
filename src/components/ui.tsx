@@ -5,7 +5,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -19,9 +18,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, F, type Weight } from '@/constants/theme';
+import { t } from '@/i18n';
 import { initial } from '@/lib/format';
+import { layout } from '@/styles/common';
 
 import { IconCheck, IconChevronLeft, IconClose, IconHelp, IconMinus, IconPlus } from './icons';
+import { styles as s } from './ui.styles';
 
 // ——— Texto ———
 
@@ -35,16 +37,7 @@ type TProps = TextProps & {
 
 export function T({ w = 500, serif, size = 14, color = C.ink, tabular, style, ...rest }: TProps) {
   const fontFamily = serif ? (w >= 600 ? F.serif600 : F.serif500) : F[w];
-  return (
-    <Text
-      {...rest}
-      style={[
-        { fontFamily, fontSize: size, color },
-        tabular && { fontVariant: ['tabular-nums'] },
-        style,
-      ]}
-    />
-  );
+  return <Text {...rest} style={[{ fontFamily, fontSize: size, color }, tabular && s.tabular, style]} />;
 }
 
 // ——— Contenedores ———
@@ -61,8 +54,8 @@ export function Screen({
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: C.bg }}
-      contentContainerStyle={{ paddingTop: insets.top + 16, paddingHorizontal: 20, paddingBottom: bottom, gap }}
+      style={s.screen}
+      contentContainerStyle={[s.screenContent, { paddingTop: insets.top + 16, paddingBottom: bottom, gap }]}
       keyboardShouldPersistTaps="handled">
       {children}
     </ScrollView>
@@ -73,34 +66,47 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
   return <View style={[s.card, style]}>{children}</View>;
 }
 
+/** Fila horizontal centrada verticalmente. */
 export function Row({ style, gap = 0, ...rest }: ViewProps & { gap?: number }) {
-  return <View {...rest} style={[{ flexDirection: 'row', alignItems: 'center', gap }, style]} />;
+  return <View {...rest} style={[s.row, { gap }, style]} />;
+}
+
+/** Columna con espacio uniforme entre hijos. */
+export function Stack({ style, gap = 0, ...rest }: ViewProps & { gap?: number }) {
+  return <View {...rest} style={[{ gap }, style]} />;
 }
 
 /** Pressable que atenúa al tocar. */
 export function Tap({ style, ...rest }: PressableProps & { style?: StyleProp<ViewStyle> }) {
-  return <Pressable {...rest} style={({ pressed }) => [style, pressed && { opacity: 0.6 }]} />;
+  return <Pressable {...rest} style={({ pressed }) => [style, pressed && s.pressed]} />;
+}
+
+/** Título grande con línea superior opcional ("Septiembre 2026"). */
+export function Title({ kicker, title }: { kicker?: string; title: ReactNode }) {
+  return (
+    <Stack gap={2} style={layout.shrink}>
+      {kicker ? (
+        <T w={600} size={13} color={C.muted}>
+          {kicker}
+        </T>
+      ) : null}
+      <T serif w={600} size={32} style={s.headerTitle}>
+        {title}
+      </T>
+    </Stack>
+  );
 }
 
 export function Header({ title, kicker, onBack, right }: { title: string; kicker?: string; onBack?: () => void; right?: ReactNode }) {
   return (
-    <Row gap={12} style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-      <Row gap={12} style={{ flexShrink: 1 }}>
+    <Row gap={12} style={s.header}>
+      <Row gap={12} style={layout.shrink}>
         {onBack && (
-          <RoundButton label="Volver" onPress={onBack}>
+          <RoundButton label={t('common.back')} onPress={onBack}>
             <IconChevronLeft />
           </RoundButton>
         )}
-        <View style={{ gap: 2, flexShrink: 1 }}>
-          {kicker ? (
-            <T w={600} size={13} color={C.muted}>
-              {kicker}
-            </T>
-          ) : null}
-          <T serif w={600} size={32} style={{ letterSpacing: -0.5 }}>
-            {title}
-          </T>
-        </View>
+        <Title kicker={kicker} title={title} />
       </Row>
       {right}
     </Row>
@@ -133,7 +139,7 @@ export function RoundButton({
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+    <Row style={s.sectionTitle}>
       <T w={800} size={16}>
         {children}
       </T>
@@ -181,7 +187,7 @@ export function Segmented<K extends string>({
               {o.label}
             </T>
             {o.extra !== undefined && (
-              <T w={700} size={12} color={on && o.activeBg ? '#FFFFFF' : C.muted}>
+              <T w={700} size={12} color={on && o.activeBg ? C.white : C.muted}>
                 {o.extra}
               </T>
             )}
@@ -192,13 +198,28 @@ export function Segmented<K extends string>({
   );
 }
 
-export function Chip({ label, on, onPress, accent = C.ink }: { label: string; on: boolean; onPress: () => void; accent?: string }) {
+/** Opción de una grilla o lista (categorías, periodicidad…): se rellena con `accent` al elegirla. */
+export function Chip({
+  label,
+  on,
+  onPress,
+  accent = C.ink,
+  style,
+  numberOfLines,
+}: {
+  label: string;
+  on: boolean;
+  onPress: () => void;
+  accent?: string;
+  style?: StyleProp<ViewStyle>;
+  numberOfLines?: number;
+}) {
   return (
     <Tap
       onPress={onPress}
       accessibilityState={{ selected: on }}
-      style={[s.chip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
-      <T w={700} size={13.5} color={on ? '#FFFFFF' : C.ink}>
+      style={[s.chip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }, style]}>
+      <T w={700} size={13.5} color={on ? C.white : C.ink} numberOfLines={numberOfLines}>
         {label}
       </T>
     </Tap>
@@ -208,8 +229,8 @@ export function Chip({ label, on, onPress, accent = C.ink }: { label: string; on
 export function Progress({ pct, color, track, height = 8 }: { pct: number; color: string; track: string; height?: number }) {
   const w = Math.max(0, Math.min(100, pct));
   return (
-    <View style={{ height, borderRadius: 99, backgroundColor: track, overflow: 'hidden' }}>
-      <View style={{ width: `${w}%`, height, borderRadius: 99, backgroundColor: color }} />
+    <View style={[s.progressTrack, { height, backgroundColor: track }]}>
+      <View style={[s.progressFill, { width: `${w}%`, height, backgroundColor: color }]} />
     </View>
   );
 }
@@ -235,11 +256,7 @@ export function Toggle({
       accessibilityState={{ checked: on, disabled }}
       accessibilityLabel={label}
       hitSlop={8}
-      style={[
-        s.track,
-        { backgroundColor: on ? accent : C.switchOff, justifyContent: on ? 'flex-end' : 'flex-start' },
-        disabled && { opacity: 0.4 },
-      ]}>
+      style={[s.track, on ? [s.trackOn, { backgroundColor: accent }] : s.trackOff, disabled && s.trackDisabled]}>
       <View style={s.knob} />
     </Tap>
   );
@@ -256,7 +273,7 @@ export function HelpTip({ text, label }: { text: string; label: string }) {
         onHoverOut={() => setOpen(false)}
         hitSlop={10}
         accessibilityRole="button"
-        accessibilityLabel={`Qué significa ${label}`}
+        accessibilityLabel={t('ui.helpLabel', { label })}
         accessibilityHint={text}
         accessibilityState={{ expanded: open }}>
         <IconHelp size={16} color={open ? C.ink : C.muted} />
@@ -264,7 +281,7 @@ export function HelpTip({ text, label }: { text: string; label: string }) {
       {open && (
         <Tap onPress={() => setOpen(false)} style={s.tip} accessibilityLiveRegion="polite">
           <View style={s.tipArrow} />
-          <T size={12.5} color="#FFFFFF" style={{ lineHeight: 18 }}>
+          <T size={12.5} color={C.white} style={s.tipText}>
             {text}
           </T>
         </Tap>
@@ -294,8 +311,8 @@ export function SwitchRow({
   disabled?: boolean;
 }) {
   return (
-    <Row gap={12} style={[s.listRow, !first && s.divider, help && { zIndex: 1 }]}>
-      <View style={{ flex: 1, gap: 2 }}>
+    <Row gap={12} style={[s.listRow, !first && s.divider, help && s.listRowRaised]}>
+      <Stack gap={2} style={layout.fill}>
         <Row gap={6}>
           <T w={700} size={14.5}>
             {label}
@@ -305,7 +322,7 @@ export function SwitchRow({
         <T size={12.5} color={C.muted}>
           {desc}
         </T>
-      </View>
+      </Stack>
       <Toggle on={on} onPress={onPress} label={label} accent={accent} disabled={disabled} />
     </Row>
   );
@@ -315,8 +332,8 @@ export function Stepper({
   value,
   onDec,
   onInc,
-  decLabel = 'Restar',
-  incLabel = 'Sumar',
+  decLabel = t('ui.decrease'),
+  incLabel = t('ui.increase'),
   minWidth = 40,
   gap = 4,
   onChange,
@@ -343,8 +360,8 @@ export function Stepper({
       {onChange ? (
         <TextInput
           value={typing ?? value}
-          onChangeText={(t) => {
-            const digits = t.replace(/\D/g, '');
+          onChangeText={(text) => {
+            const digits = text.replace(/\D/g, '');
             setTyping(digits);
             if (digits) onChange(Number(digits));
           }}
@@ -356,7 +373,7 @@ export function Stepper({
           style={[s.stepInput, { minWidth }]}
         />
       ) : (
-        <T w={800} size={15} tabular style={{ minWidth, textAlign: 'center' }} accessibilityLiveRegion="polite">
+        <T w={800} size={15} tabular style={[s.stepValue, { minWidth }]} accessibilityLiveRegion="polite">
           {value}
         </T>
       )}
@@ -369,7 +386,7 @@ export function Stepper({
 
 export function RadioDot({ on, accent }: { on: boolean; accent: string }) {
   return (
-    <View style={[s.radio, { borderColor: on ? accent : C.ring }]}>
+    <View style={[s.radio, on ? { borderColor: accent } : s.radioOff]}>
       {on && <View style={[s.radioDot, { backgroundColor: accent }]} />}
     </View>
   );
@@ -391,10 +408,11 @@ export function PrimaryButton({
   return (
     <Tap
       onPress={disabled ? undefined : onPress}
+      accessibilityRole="button"
       accessibilityState={{ disabled }}
-      style={[s.primary, { backgroundColor: bg, opacity: disabled ? 0.45 : 1 }]}>
-      {icon && <IconCheck size={20} color="#FFFFFF" stroke={2.2} />}
-      <T w={800} size={16} color="#FFFFFF">
+      style={[s.primary, { backgroundColor: bg }, disabled && { opacity: 0.45 }]}>
+      {icon && <IconCheck size={20} color={C.white} stroke={2.2} />}
+      <T w={800} size={16} color={C.white}>
         {label}
       </T>
     </Tap>
@@ -402,7 +420,7 @@ export function PrimaryButton({
 }
 
 export function Field(props: TextInputProps) {
-  return <TextInput placeholderTextColor="#8A847A" {...props} style={[s.field, props.style]} />;
+  return <TextInput placeholderTextColor={C.placeholder} {...props} style={[s.field, props.style]} />;
 }
 
 export { AmountField } from './amount-field';
@@ -424,9 +442,9 @@ export function Toast({
   return (
     <Row gap={12} style={[s.toast, { borderColor: color }]} accessibilityRole="alert">
       <View style={[s.toastIcon, { backgroundColor: color }]}>
-        <IconCheck size={18} color="#FFFFFF" />
+        <IconCheck size={18} color={C.white} />
       </View>
-      <View style={{ flex: 1, gap: 2 }}>
+      <Stack gap={2} style={layout.fill}>
         <T w={800} size={14.5} color={color}>
           {title}
         </T>
@@ -435,9 +453,9 @@ export function Toast({
             {text}
           </T>
         ) : null}
-      </View>
+      </Stack>
       {onClose && (
-        <Tap onPress={onClose} accessibilityLabel="Cerrar aviso" style={{ padding: 10 }}>
+        <Tap onPress={onClose} accessibilityLabel={t('ui.closeNotice')} style={s.toastClose}>
           <IconClose size={16} color={C.muted} />
         </Tap>
       )}
@@ -448,11 +466,11 @@ export function Toast({
 export function EmptyBox({ title, hint }: { title: string; hint?: string }) {
   return (
     <View style={s.empty}>
-      <T w={800} size={14.5} style={{ textAlign: 'center' }}>
+      <T w={800} size={14.5} style={layout.textCenter}>
         {title}
       </T>
       {hint ? (
-        <T size={12.5} color={C.muted} style={{ textAlign: 'center' }}>
+        <T size={12.5} color={C.muted} style={layout.textCenter}>
           {hint}
         </T>
       ) : null}
@@ -476,17 +494,17 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="Cerrar panel" />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={layout.fill}>
+        <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel={t('ui.closePanel')} />
         <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
           <View style={s.handle} />
-          <ScrollView contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={s.sheetContent} keyboardShouldPersistTaps="handled">
             {title !== undefined && (
-              <Row gap={12} style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <T serif w={600} size={24} style={{ flex: 1 }}>
+              <Row gap={12} style={s.sheetHeader}>
+                <T serif w={600} size={24} style={layout.fill}>
                   {title}
                 </T>
-                <RoundButton label="Cerrar" onPress={onClose}>
+                <RoundButton label={t('common.close')} onPress={onClose}>
                   <IconClose size={16} />
                 </RoundButton>
               </Row>
@@ -528,26 +546,35 @@ export function MovementRow({
           onPress={check.onToggle}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: check.on }}
-          accessibilityLabel={`${check.on ? 'Desmarcar' : 'Marcar'} ${name} como ${income ? 'recibido' : 'pagado'}`}
-          style={[s.check, { borderColor: check.on ? C.ink : C.ring, backgroundColor: check.on ? C.ink : C.card }]}>
-          {check.on && <IconCheck size={18} color="#FFFFFF" />}
+          accessibilityLabel={t(
+            income
+              ? check.on
+                ? 'ui.unmarkReceived'
+                : 'ui.markReceived'
+              : check.on
+                ? 'ui.unmarkPaid'
+                : 'ui.markPaid',
+            { name },
+          )}
+          style={[s.check, check.on ? s.checkOn : s.checkOff]}>
+          {check.on && <IconCheck size={18} color={C.white} />}
         </Tap>
       ) : (
-        <View style={[s.avatar, { backgroundColor: income ? C.inSoft : C.outSoft }]}>
+        <View style={[s.avatar, income ? s.avatarIn : s.avatarOut]}>
           <T w={800} size={15} color={income ? C.inDark : C.outDark}>
             {initial(name)}
           </T>
         </View>
       )}
-      <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+      <Stack gap={2} style={layout.fillShrink}>
         <T w={700} size={15} numberOfLines={1}>
           {name}
         </T>
         <T size={12.5} color={C.muted} numberOfLines={1}>
           {meta}
         </T>
-      </View>
-      <View style={{ alignItems: 'flex-end', gap: 3 }}>
+      </Stack>
+      <View style={s.movAmount}>
         <T w={800} size={15} tabular color={income ? C.in : C.out}>
           {amount}
         </T>
@@ -560,137 +587,3 @@ export function MovementRow({
     </Tap>
   );
 }
-
-export const s = StyleSheet.create({
-  card: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 20 },
-  round: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segWrap: { backgroundColor: C.segBg, borderRadius: 16, padding: 4, flexDirection: 'row', gap: 4 },
-  segBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  segOn: {
-    backgroundColor: C.card,
-    shadowColor: C.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  chip: { height: 44, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1, justifyContent: 'center' },
-  track: { width: 50, height: 30, borderRadius: 15, padding: 3, flexDirection: 'row', alignItems: 'center' },
-  knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
-  listRow: { paddingVertical: 12, minHeight: 56 },
-  tip: {
-    position: 'absolute',
-    top: 26,
-    left: -12,
-    width: 260,
-    backgroundColor: C.ink,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    zIndex: 10,
-    elevation: 6,
-    shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-  },
-  tipArrow: {
-    position: 'absolute',
-    top: -5,
-    left: 15,
-    width: 10,
-    height: 10,
-    backgroundColor: C.ink,
-    transform: [{ rotate: '45deg' }],
-  },
-  divider: { borderTopWidth: 1, borderTopColor: C.divider },
-  stepper: { backgroundColor: C.chip, borderRadius: 14, padding: 4 },
-  stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: C.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepInput: {
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: C.card,
-    textAlign: 'center',
-    fontFamily: F[800],
-    fontSize: 15,
-    color: C.ink,
-    padding: 0,
-  },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  radioDot: { width: 10, height: 10, borderRadius: 5 },
-  primary: {
-    height: 56,
-    borderRadius: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  field: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    fontFamily: F[500],
-    fontSize: 14.5,
-    color: C.ink,
-    paddingHorizontal: 14,
-  },
-  toast: {
-    backgroundColor: C.card,
-    borderWidth: 1.5,
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingLeft: 12,
-    paddingRight: 4,
-  },
-  toastIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  empty: {
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#D5CFC4',
-    borderRadius: 20,
-    paddingVertical: 22,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 4,
-  },
-  backdrop: { flex: 1, backgroundColor: 'rgba(27,26,23,0.42)' },
-  sheet: {
-    maxHeight: '85%',
-    backgroundColor: C.bg,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 20,
-  },
-  handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#D3CDC2', marginBottom: 10 },
-  movRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  avatar: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  check: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  badge: { backgroundColor: C.chip, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, overflow: 'hidden' },
-});

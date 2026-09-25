@@ -1,22 +1,37 @@
 import { router } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import { C } from '@/constants/theme';
+import { t } from '@/i18n';
 import { hasMarks, loadDays, marksOf, monthCells, type CalFilter, type DayData, type DayMarks } from '@/lib/calendar';
-import { addDays, fromISO, shortDate, todayISO, weekdayOf } from '@/lib/dates';
-import { MONTHS, WD_FULL, WD_SHORT } from '@/lib/format';
+import {
+  addDays,
+  fromISO,
+  monthAbbr,
+  monthKey,
+  monthName,
+  monthShort,
+  shortDate,
+  todayISO,
+  weekdayInitials,
+  weekdayName,
+  weekdayOf,
+} from '@/lib/dates';
 import type { HolidayMap } from '@/lib/holidays';
 import { useApp, useLoad } from '@/state/app';
+import { layout } from '@/styles/common';
 
+import { styles as st } from './calendar.styles';
 import { IconChevronLeft, IconChevronRight, IconExpand } from './icons';
-import { RoundButton, Row, Segmented, T, Tap } from './ui';
+import { RoundButton, Row, Segmented, Stack, T, Tap, type SegOption } from './ui';
 
-export const FILTERS: { id: CalFilter; label: string; activeFg?: string; activeBg?: string }[] = [
-  { id: 'todos', label: 'Todos' },
-  { id: 'gasto', label: 'Gastos', activeFg: '#FFFFFF', activeBg: C.out },
-  { id: 'ingreso', label: 'Ingresos', activeFg: '#FFFFFF', activeBg: C.in },
+/** Opciones del selector Todos / Gastos / Ingresos. */
+export const calendarFilters = (): SegOption<CalFilter>[] => [
+  { id: 'todos', label: t('common.all') },
+  { id: 'gasto', label: t('common.expenses'), activeFg: C.white, activeBg: C.out },
+  { id: 'ingreso', label: t('common.incomes'), activeFg: C.white, activeBg: C.in },
 ];
 
 type Days = ReadonlyMap<string, DayData> | undefined;
@@ -58,8 +73,8 @@ export function MonthGrid({
   const z = SIZES[size];
   return (
     <View>
-      <Row style={{ marginBottom: 4 }}>
-        {WD_SHORT.map((d, i) => (
+      <Row style={st.weekHeader}>
+        {weekdayInitials().map((d, i) => (
           <T key={d + i} w={800} size={size === 'lg' ? 12.5 : 11.5} color={i >= 5 ? C.faint : C.muted} style={st.wd}>
             {d}
           </T>
@@ -107,15 +122,14 @@ function DayCell({
 }) {
   const d = fromISO(iso);
   const weekend = weekdayOf(iso) >= 5;
-  const bg = today ? C.ink : holiday ? C.holidaySoft : 'transparent';
-  const color = today ? '#FFFFFF' : holiday ? C.holidayDark : weekend ? C.muted : C.ink;
+  const color = today ? C.white : holiday ? C.holidayDark : weekend ? C.muted : C.ink;
   const ring = z.circle + 6;
   const label = [
-    `${WD_FULL[weekdayOf(iso)]} ${d.getDate()} de ${MONTHS[d.getMonth()].toLowerCase()}`,
-    today && 'hoy',
-    holiday && `festivo: ${holiday}`,
-    (marks.out || marks.outPending) && 'con gastos',
-    (marks.in || marks.inPending) && 'con ingresos',
+    t('calendar.a11y.day', { weekday: weekdayName(weekdayOf(iso)), day: d.getDate(), month: monthName(d.getMonth()).toLowerCase() }),
+    today && t('calendar.a11y.today'),
+    holiday && t('calendar.a11y.holiday', { name: holiday }),
+    (marks.out || marks.outPending) && t('calendar.a11y.withExpenses'),
+    (marks.in || marks.inPending) && t('calendar.a11y.withIncomes'),
   ]
     .filter(Boolean)
     .join(', ');
@@ -126,13 +140,20 @@ function DayCell({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
-      style={[st.cell, { height: z.cell, gap: z.gap, opacity: inMonth ? 1 : 0.3 }]}>
+      style={[st.cell, { height: z.cell, gap: z.gap }, !inMonth && st.outOfMonth]}>
       <View
         style={[
           st.center,
-          { width: ring, height: ring, borderRadius: ring / 2, borderWidth: 2, borderColor: selected ? (today ? C.outBar : C.ink) : 'transparent' },
+          st.ring,
+          { width: ring, height: ring, borderRadius: ring / 2 },
+          selected && (today ? st.ringSelectedToday : st.ringSelected),
         ]}>
-        <View style={[st.center, { width: z.circle, height: z.circle, borderRadius: z.circle / 2, backgroundColor: bg }]}>
+        <View
+          style={[
+            st.center,
+            { width: z.circle, height: z.circle, borderRadius: z.circle / 2 },
+            today ? st.dayToday : holiday ? st.dayHoliday : null,
+          ]}>
           <T w={today || holiday ? 800 : 600} size={z.font} color={color} tabular>
             {d.getDate()}
           </T>
@@ -152,28 +173,24 @@ function DayCell({
 function Dot({ size, color, ring }: { size: number; color: string; ring?: boolean }) {
   return (
     <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: ring ? 'transparent' : color,
-        borderWidth: ring ? 1.4 : 0,
-        borderColor: color,
-      }}
+      style={[
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: color, borderColor: color },
+        ring && st.dotRing,
+      ]}
     />
   );
 }
 
 export function Legend({ filter }: { filter: CalFilter }) {
   const items: { key: string; label: string; node: ReactNode }[] = [
-    { key: 'hoy', label: 'Hoy', node: <View style={[st.swatch, { backgroundColor: C.ink }]} /> },
-    { key: 'fest', label: 'Festivo', node: <View style={[st.swatch, { backgroundColor: C.holidaySoft, borderWidth: 1, borderColor: C.holiday }]} /> },
+    { key: 'hoy', label: t('common.today'), node: <View style={[st.swatch, st.swatchToday]} /> },
+    { key: 'fest', label: t('calendar.legend.holiday'), node: <View style={[st.swatch, st.swatchHoliday]} /> },
   ];
-  if (filter !== 'ingreso') items.push({ key: 'g', label: 'Gasto', node: <Dot size={7} color={C.out} /> });
-  if (filter !== 'gasto') items.push({ key: 'i', label: 'Ingreso', node: <Dot size={7} color={C.in} /> });
-  items.push({ key: 'p', label: 'Pendiente', node: <Dot size={7} color={C.muted} ring /> });
+  if (filter !== 'ingreso') items.push({ key: 'g', label: t('common.expense'), node: <Dot size={7} color={C.out} /> });
+  if (filter !== 'gasto') items.push({ key: 'i', label: t('common.income'), node: <Dot size={7} color={C.in} /> });
+  items.push({ key: 'p', label: t('common.pending'), node: <Dot size={7} color={C.muted} ring /> });
   return (
-    <Row gap={14} style={{ flexWrap: 'wrap', rowGap: 6 }}>
+    <Row gap={14} style={st.legend}>
       {items.map((it) => (
         <Row key={it.key} gap={6}>
           {it.node}
@@ -219,47 +236,48 @@ export function DatePicker({
     setDir(Math.sign(k));
     setCursor({ year: d.getFullYear(), month: d.getMonth() });
   };
-  const inToday = today.slice(0, 7) === `${year}-${String(month + 1).padStart(2, '0')}`;
+  const shown = monthKey(year, month);
+  const inToday = today.slice(0, 7) === shown;
   const enter = dir > 0 ? FadeInRight.duration(220) : dir < 0 ? FadeInLeft.duration(220) : FadeIn.duration(200);
 
   return (
-    <View style={{ gap: 12 }}>
-      <Row style={{ justifyContent: 'space-between' }}>
+    <Stack gap={12}>
+      <Row style={layout.between}>
         <View>
           <T w={600} size={12.5} color={C.muted}>
             {year}
           </T>
-          <T serif w={600} size={24} style={{ letterSpacing: -0.3 }}>
-            {MONTHS[month]}
+          <T serif w={600} size={24} style={st.pickerTitle}>
+            {monthName(month)}
           </T>
         </View>
         <Row gap={8}>
           {!inToday && (
             <Tap
               onPress={() => {
-                setDir(today < `${year}-${String(month + 1).padStart(2, '0')}` ? -1 : 1);
+                setDir(today < shown ? -1 : 1);
                 setCursor({ year: fromISO(today).getFullYear(), month: fromISO(today).getMonth() });
               }}
               style={st.todayBtn}
-              accessibilityLabel="Ir a hoy">
+              accessibilityLabel={t('calendar.goToday')}>
               <T w={800} size={13}>
-                Hoy
+                {t('common.today')}
               </T>
             </Tap>
           )}
-          <RoundButton label="Mes anterior" onPress={() => go(-1)}>
+          <RoundButton label={t('calendar.prevMonth')} onPress={() => go(-1)}>
             <IconChevronLeft />
           </RoundButton>
-          <RoundButton label="Mes siguiente" onPress={() => go(1)}>
+          <RoundButton label={t('calendar.nextMonth')} onPress={() => go(1)}>
             <IconChevronRight />
           </RoundButton>
         </Row>
       </Row>
-      <Animated.View key={`${year}-${month}`} entering={enter} style={st.pickerGrid}>
+      <Animated.View key={shown} entering={enter} style={st.pickerGrid}>
         <MonthGrid year={year} month={month} days={days} filter={filter} selected={value} onSelect={onChange} />
       </Animated.View>
       <Legend filter={filter} />
-    </View>
+    </Stack>
   );
 }
 
@@ -279,22 +297,27 @@ export function YearGrid({
 }) {
   const { holidays } = useApp();
   const today = todayISO();
-  const t = fromISO(today);
+  const now = fromISO(today);
   return (
     <View style={st.yearGrid}>
-      {MONTHS.map((name, m) => {
-        const current = t.getFullYear() === year && t.getMonth() === m;
-        const prefix = `${year}-${String(m + 1).padStart(2, '0')}-`;
+      {Array.from({ length: 12 }, (_, m) => {
+        const name = monthName(m);
+        const current = now.getFullYear() === year && now.getMonth() === m;
+        const prefix = `${monthKey(year, m)}-`;
         const nHol = [...holidays.keys()].filter((d) => d.startsWith(prefix)).length;
         return (
           <Tap
-            key={name}
+            key={m}
             onPress={() => onPick(m)}
-            accessibilityLabel={`${name} ${year}${nHol ? `, ${nHol} festivos` : ''}`}
-            style={[st.miniCard, current && { borderColor: C.ink, borderWidth: 1.5 }]}>
-            <Row style={{ justifyContent: 'space-between' }}>
+            accessibilityLabel={
+              nHol
+                ? t('calendar.a11y.monthWithHolidays', { month: name, year, count: nHol })
+                : t('calendar.a11y.month', { month: name, year })
+            }
+            style={[st.miniCard, current && st.miniCardCurrent]}>
+            <Row style={layout.between}>
               <T serif w={600} size={15} color={current ? C.ink : C.muted2}>
-                {name.slice(0, 3)}
+                {monthAbbr(m)}
               </T>
               {nHol > 0 && (
                 <View style={st.miniBadge}>
@@ -340,13 +363,8 @@ function MiniMonth({
             const dot = mk.out || mk.outPending ? (mk.in || mk.inPending ? C.ink : C.out) : mk.in || mk.inPending ? C.in : null;
             return (
               <View key={iso} style={st.miniCell}>
-                <View
-                  style={[
-                    st.center,
-                    st.miniNum,
-                    isToday ? { backgroundColor: C.ink } : hol ? { backgroundColor: C.holidaySoft } : null,
-                  ]}>
-                  <T w={isToday || hol ? 800 : 600} size={8.5} color={isToday ? '#FFFFFF' : hol ? C.holidayDark : C.muted2} tabular>
+                <View style={[st.center, st.miniNum, isToday ? st.dayToday : hol ? st.dayHoliday : null]}>
+                  <T w={isToday || hol ? 800 : 600} size={8.5} color={isToday ? C.white : hol ? C.holidayDark : C.muted2} tabular>
                     {fromISO(iso).getDate()}
                   </T>
                 </View>
@@ -393,7 +411,7 @@ export function CalendarCard() {
     ([d, v]) => fromISO(d).getMonth() === month && hasMarks(marksOf(v, filter)),
   ).length;
 
-  const firstOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const firstOfMonth = `${monthKey(year, month)}-01`;
   const open = (date?: string) =>
     router.push({
       pathname: '/calendario',
@@ -402,83 +420,52 @@ export function CalendarCard() {
 
   return (
     <Animated.View entering={FadeIn.duration(250)} style={st.card}>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <View style={{ gap: 2 }}>
+      <Row style={layout.between}>
+        <Stack gap={2}>
           <T w={800} size={16}>
-            Calendario
+            {t('calendar.title')}
           </T>
           <T w={600} size={12.5} color={C.muted}>
-            {monthMarks === 0 ? 'Sin movimientos en el mes' : `${monthMarks} ${monthMarks === 1 ? 'día' : 'días'} con movimientos`}
+            {monthMarks === 0 ? t('calendar.card.noMarks') : t('calendar.card.daysWithMarks', { count: monthMarks })}
           </T>
-        </View>
-        <RoundButton label="Abrir calendario en pantalla completa" onPress={() => open()}>
+        </Stack>
+        <RoundButton label={t('calendar.card.openFull')} onPress={() => open()}>
           <IconExpand size={17} />
         </RoundButton>
       </Row>
 
-      <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+      <Segmented options={calendarFilters()} value={filter} onChange={setFilter} />
 
       <MonthGrid year={year} month={month} days={days} filter={filter} onSelect={(iso) => open(iso)} />
 
       <Legend filter={filter} />
 
       {next && (
-        <Tap onPress={() => open(next.date)} style={st.nextHol} accessibilityLabel={`Próximo festivo: ${next.name}, ${shortDate(next.date)}`}>
+        <Tap
+          onPress={() => open(next.date)}
+          style={st.nextHol}
+          accessibilityLabel={t('calendar.card.nextHolidayLabel', { name: next.name, date: shortDate(next.date) })}>
           <View style={st.nextHolDate}>
             <T w={800} size={15} color={C.holidayDark} tabular>
               {fromISO(next.date).getDate()}
             </T>
             <T w={700} size={9.5} color={C.holidayDark}>
-              {MONTHS[fromISO(next.date).getMonth()].slice(0, 3).toUpperCase()}
+              {monthShort(fromISO(next.date).getMonth()).toUpperCase()}
             </T>
           </View>
-          <View style={{ flex: 1, gap: 1, minWidth: 0 }}>
+          <Stack gap={1} style={layout.fillShrink}>
             <T w={700} size={11.5} color={C.holiday}>
-              {next.date === today ? 'Hoy es festivo' : 'Próximo festivo'}
+              {next.date === today ? t('calendar.card.todayHoliday') : t('calendar.card.nextHoliday')}
             </T>
             <T w={700} size={14} numberOfLines={1}>
               {next.name}
             </T>
-          </View>
+          </Stack>
           <T w={700} size={12} color={C.muted}>
-            {WD_FULL[weekdayOf(next.date)]}
+            {weekdayName(weekdayOf(next.date))}
           </T>
         </Tap>
       )}
     </Animated.View>
   );
 }
-
-const st = StyleSheet.create({
-  card: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 20, padding: 16, gap: 14 },
-  wd: { flex: 1, textAlign: 'center' },
-  cell: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  swatch: { width: 12, height: 12, borderRadius: 6 },
-  todayBtn: { height: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, justifyContent: 'center' },
-  pickerGrid: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 20, paddingHorizontal: 4, paddingVertical: 10 },
-  yearGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  miniCard: {
-    width: '31.4%',
-    flexGrow: 1,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 16,
-    padding: 8,
-    gap: 6,
-  },
-  miniBadge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: C.holidaySoft, alignItems: 'center', justifyContent: 'center' },
-  miniCell: { flex: 1, alignItems: 'center', height: 17 },
-  miniNum: { width: 13, height: 13, borderRadius: 7 },
-  miniDot: { width: 3, height: 3, borderRadius: 2, marginTop: 1 },
-  nextHol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: C.divider,
-    paddingTop: 12,
-  },
-  nextHolDate: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.holidaySoft, alignItems: 'center', justifyContent: 'center' },
-});

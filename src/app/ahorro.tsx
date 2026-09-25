@@ -1,36 +1,37 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Alert, View } from 'react-native';
 
 import { IconPlus, IconRefresh, IconTarget } from '@/components/icons';
-import { AmountField, Card, Field, Header, PrimaryButton, Progress, Row, Screen, Sheet, T, Tap, Toast } from '@/components/ui';
+import {
+  AmountField,
+  Card,
+  Field,
+  Header,
+  PrimaryButton,
+  Progress,
+  Row,
+  Screen,
+  Sheet,
+  Stack,
+  T,
+  Tap,
+  Toast,
+} from '@/components/ui';
 import { C } from '@/constants/theme';
 import { contributeGoal, deleteGoal, insertGoal, insertSavings, listGoals, listSavings, type Goal } from '@/db/repo';
-import { periodName, periodRange, shortDate, todayISO } from '@/lib/dates';
-import { cleanAmount, dots, fmt, signed } from '@/lib/format';
+import { t } from '@/i18n';
+import { periodLabel, periodRange, shortDate, todayISO } from '@/lib/dates';
+import { cleanAmount, dots, fmt, joinMeta, signed } from '@/lib/format';
 import { useApp, useLoad } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/ahorro.styles';
 
 type SheetKind = 'update' | 'add' | 'goal' | 'newGoal';
 
-const TITLES: Record<SheetKind, string> = {
-  update: 'Actualizar saldo',
-  add: 'Agregar dinero',
-  goal: 'Aportar',
-  newGoal: 'Nueva meta',
-};
-const INPUT_LABELS: Record<SheetKind, string> = {
-  update: '¿Cuánto tienes ahorrado hoy?',
-  add: '¿Cuánto vas a agregar?',
-  goal: '¿Cuánto vas a aportar?',
-  newGoal: '¿Cuánto necesitas reunir?',
-};
-const CONFIRM_LABELS: Record<SheetKind, string> = {
-  update: 'Guardar y comparar',
-  add: 'Agregar al ahorro',
-  goal: 'Aportar a la meta',
-  newGoal: 'Crear meta',
-};
+/** Montos rápidos para sumar al campo. */
+const QUICK_AMOUNTS = [50000, 100000, 200000];
 
 const pctOf = (saved: number, target: number) => (target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0);
 
@@ -70,64 +71,79 @@ export default function Ahorro() {
   let previewValue = '';
   let previewNeg = false;
   if (sheet === 'update') {
-    if (!input) previewTitle = 'Escribe tu saldo para comparar';
+    if (!input) previewTitle = t('savings.preview.typeBalance');
     else {
       const d = amount - balance;
-      previewTitle = d > 0 ? 'Ahorraste' : d < 0 ? 'Tu ahorro bajó' : 'Sin cambios';
+      previewTitle = d > 0 ? t('savings.preview.saved') : d < 0 ? t('savings.preview.dropped') : t('savings.preview.noChange');
       previewValue = fmt(d);
       previewNeg = d < 0;
     }
   } else if (sheet === 'add') {
-    previewTitle = 'Nuevo total';
+    previewTitle = t('savings.preview.newTotal');
     previewValue = fmt(balance + amount);
   } else if (goal) {
-    previewTitle = `Nuevo saldo · ${pctOf(goal.saved + amount, goal.target)}%`;
+    previewTitle = t('savings.preview.newGoalBalance', { pct: pctOf(goal.saved + amount, goal.target) });
     previewValue = fmt(goal.saved + amount);
   } else if (sheet === 'newGoal') {
-    previewTitle = 'Empiezas en $ 0 de';
+    previewTitle = t('savings.preview.startAt');
     previewValue = fmt(amount);
   }
+  const previewStyle = previewNeg
+    ? st.previewNegative
+    : sheet === 'newGoal' || !input
+      ? st.previewNeutral
+      : st.previewPositive;
+  const previewColor = previewNeg ? C.warn : C.inDark;
 
   const cantSave =
     sheet === 'update' ? !input : sheet === 'newGoal' ? amount <= 0 || !nameInput.trim() : amount <= 0;
+
+  const sheetTitle = sheet === 'goal' && goal ? t('savings.sheet.contributeTo', { name: goal.name }) : sheet ? t(`savings.sheet.title.${sheet}`) : '';
 
   const confirm = async () => {
     if (cantSave || !sheet) return;
     const today = todayISO();
     if (sheet === 'update') {
       const d = amount - balance;
-      const prev = lastDate;
       await insertSavings(db, { kind: 'update', date: today, delta: d, after: amount });
       setResult({
         negative: d < 0,
-        title: d > 0 ? `Ahorraste ${fmt(d)}` : d < 0 ? `Tu ahorro bajó ${fmt(d)}` : 'Tu ahorro no cambió',
-        text: entries.length ? `Comparado con el saldo del ${prev}` : 'Primer registro de tu ahorro',
+        title:
+          d > 0
+            ? t('savings.result.saved', { amount: fmt(d) })
+            : d < 0
+              ? t('savings.result.dropped', { amount: fmt(d) })
+              : t('savings.result.unchanged'),
+        text: entries.length ? t('savings.result.comparedTo', { date: lastDate }) : t('savings.result.first'),
       });
     } else if (sheet === 'add') {
       await insertSavings(db, { kind: 'add', date: today, delta: amount, after: balance + amount });
-      setResult({ title: `Agregaste ${fmt(amount)}`, text: `Nuevo total: ${fmt(balance + amount)}` });
+      setResult({
+        title: t('savings.result.added', { amount: fmt(amount) }),
+        text: t('savings.result.newTotal', { amount: fmt(balance + amount) }),
+      });
     } else if (sheet === 'goal' && goal) {
       await contributeGoal(db, goal.id, amount);
       const saved = goal.saved + amount;
       const left = Math.max(0, goal.target - saved);
       setResult({
-        title: `Aportaste ${fmt(amount)} a ${goal.name}`,
-        text: left > 0 ? `Llevas ${pctOf(saved, goal.target)}% · faltan ${fmt(left)}` : '¡Cumpliste esta meta!',
+        title: t('savings.result.contributed', { amount: fmt(amount), name: goal.name }),
+        text: left > 0 ? t('savings.result.progress', { pct: pctOf(saved, goal.target), left: fmt(left) }) : t('savings.result.goalDone'),
       });
     } else if (sheet === 'newGoal') {
       const name = nameInput.trim();
       await insertGoal(db, name, amount);
-      setResult({ title: `Creaste la meta ${name}`, text: `Objetivo: ${fmt(amount)}` });
+      setResult({ title: t('savings.result.goalCreated', { name }), text: t('savings.result.target', { amount: fmt(amount) }) });
     }
     close();
     bump();
   };
 
   const askDeleteGoal = (g: Goal) =>
-    Alert.alert(`¿Eliminar la meta ${g.name}?`, 'Se borra la meta y su progreso.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('savings.deleteGoal.title', { name: g.name }), t('savings.deleteGoal.text'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Eliminar',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           await deleteGoal(db, g.id);
@@ -137,33 +153,33 @@ export default function Ahorro() {
     ]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={layout.screen}>
       <Screen bottom={48}>
-        <Header onBack={() => router.back()} kicker={`${periodName(currentPeriod)} ${currentPeriod.year}`} title="Ahorro" />
+        <Header onBack={() => router.back()} kicker={periodLabel(currentPeriod)} title={t('savings.title')} />
 
         <View style={st.hero}>
-          <View style={{ gap: 4 }}>
+          <Stack gap={4}>
             <T w={700} size={13} color={C.inSub}>
-              Total ahorrado
+              {t('savings.total')}
             </T>
-            <T serif size={40} color="#F4F8FB" tabular numberOfLines={1} adjustsFontSizeToFit style={{ letterSpacing: -1 }}>
+            <T serif size={40} color={C.inHeroText} tabular numberOfLines={1} adjustsFontSizeToFit style={st.heroAmount}>
               {fmt(balance)}
             </T>
-          </View>
+          </Stack>
           <Row gap={10}>
             <View style={st.heroTile}>
               <T w={700} size={12.5} color={C.inSub}>
-                Este mes
+                {t('savings.thisMonth')}
               </T>
-              <T w={800} size={16} color="#F4F8FB" tabular>
+              <T w={800} size={16} color={C.inHeroText} tabular>
                 {signed(monthTotal)}
               </T>
             </View>
             <View style={st.heroTile}>
               <T w={700} size={12.5} color={C.inSub}>
-                Último registro
+                {t('savings.lastEntry')}
               </T>
-              <T w={800} size={16} color="#F4F8FB">
+              <T w={800} size={16} color={C.inHeroText}>
                 {lastDate}
               </T>
             </View>
@@ -173,36 +189,36 @@ export default function Ahorro() {
         <Row gap={10}>
           <ActionTile
             icon={<IconRefresh color={C.inDark} />}
-            title="Actualizar saldo"
-            desc="Compara con el anterior"
+            title={t('savings.sheet.title.update')}
+            desc={t('savings.actions.updateDesc')}
             onPress={() => open('update')}
           />
           <ActionTile
             icon={<IconPlus color={C.inDark} />}
-            title="Agregar dinero"
-            desc="Suma directo al ahorro"
+            title={t('savings.sheet.title.add')}
+            desc={t('savings.actions.addDesc')}
             onPress={() => open('add')}
           />
         </Row>
 
         {result && <Toast title={result.title} text={result.text} warn={result.negative} onClose={() => setResult(null)} />}
 
-        <View style={{ gap: 10 }}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <View style={{ gap: 2, flex: 1 }}>
+        <Stack gap={10}>
+          <Row style={layout.between}>
+            <Stack gap={2} style={layout.fill}>
               <T w={800} size={16}>
-                Metas
+                {t('savings.goals.title')}
               </T>
               <T size={12.5} color={C.muted}>
                 {goals.length
-                  ? `${fmt(goalsSaved)} apartado en ${goals.length} ${goals.length === 1 ? 'meta' : 'metas'}`
-                  : 'Aparta dinero para un objetivo'}
+                  ? t('savings.goals.summary', { amount: fmt(goalsSaved), count: goals.length })
+                  : t('savings.goals.empty')}
               </T>
-            </View>
-            <Tap style={st.newGoal} onPress={() => open('newGoal')}>
+            </Stack>
+            <Tap style={common.pillBtn} onPress={() => open('newGoal')}>
               <IconPlus size={16} />
               <T w={800} size={13.5}>
-                Nueva meta
+                {t('savings.sheet.title.newGoal')}
               </T>
             </Tap>
           </Row>
@@ -212,72 +228,72 @@ export default function Ahorro() {
             return (
               <Tap key={g.id} onLongPress={() => askDeleteGoal(g)} style={st.goal}>
                 <Row gap={12}>
-                  <View style={st.goalIcon}>
+                  <View style={[common.iconTile, st.goalIcon]}>
                     <IconTarget color={C.inDark} />
                   </View>
-                  <View style={{ flex: 1, gap: 2 }}>
+                  <Stack gap={2} style={layout.fill}>
                     <T w={800} size={15}>
                       {g.name}
                     </T>
                     <T size={12.5} color={C.muted}>
-                      {g.last_date ? `Último aporte ${shortDate(g.last_date)}` : 'Sin aportes todavía'}
+                      {g.last_date ? t('savings.goals.lastContribution', { date: shortDate(g.last_date) }) : t('savings.goals.noContributions')}
                     </T>
-                  </View>
+                  </Stack>
                   <T w={800} size={15} color={C.inDark}>
-                    {pct}%
+                    {t('savings.percent', { pct })}
                   </T>
                 </Row>
-                <View style={{ gap: 8 }}>
-                  <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Stack gap={8}>
+                  <Row style={layout.betweenBaseline}>
                     <T serif w={600} size={20} tabular>
                       {fmt(g.saved)}
                     </T>
                     <T w={600} size={12.5} color={C.muted}>
-                      de {fmt(g.target)}
+                      {t('fixed.ofTotal', { amount: fmt(g.target) })}
                     </T>
                   </Row>
                   <Progress pct={pct} color={C.in} track={C.inTrack} />
-                </View>
-                <Row style={{ justifyContent: 'space-between' }}>
+                </Stack>
+                <Row style={layout.between}>
                   <T w={700} size={12.5} color={left > 0 ? C.muted : C.inDark}>
-                    {left > 0 ? `Faltan ${fmt(left)}` : 'Meta cumplida'}
+                    {left > 0 ? t('savings.goals.left', { amount: fmt(left) }) : t('savings.goals.done')}
                   </T>
                   <Tap onPress={() => open('goal', g.id)} style={st.contribute}>
-                    <T w={800} size={13} color="#FFFFFF">
-                      Aportar
+                    <T w={800} size={13} color={C.white}>
+                      {t('savings.sheet.title.goal')}
                     </T>
                   </Tap>
                 </Row>
               </Tap>
             );
           })}
-        </View>
+        </Stack>
 
-        <View style={{ gap: 10 }}>
+        <Stack gap={10}>
           <T w={800} size={16}>
-            Historial
+            {t('savings.history.title')}
           </T>
-          <Card style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
+          <Card style={common.listCard}>
             {entries.length === 0 ? (
-              <T size={13.5} color={C.muted} style={{ paddingVertical: 16, textAlign: 'center' }}>
-                Aún no hay registros. Empieza actualizando tu saldo.
+              <T size={13.5} color={C.muted} style={st.emptyHistory}>
+                {t('savings.history.empty')}
               </T>
             ) : (
               entries.map((e, i) => {
                 const add = e.kind === 'add';
                 return (
-                  <Row key={e.id} gap={12} style={[{ paddingVertical: 12 }, i > 0 && { borderTopWidth: 1, borderTopColor: C.divider }]}>
-                    <View style={[st.histIcon, { backgroundColor: add ? C.in : C.inSoft }]}>
-                      {add ? <IconPlus color="#FFFFFF" /> : <IconRefresh color={C.inDark} />}
+                  <Row key={e.id} gap={12} style={[st.histRow, i > 0 && common.divider]}>
+                    <View style={[common.iconTile, add ? st.histIconAdd : st.histIconUpdate]}>
+                      {add ? <IconPlus color={C.white} /> : <IconRefresh color={C.inDark} />}
                     </View>
-                    <View style={{ flex: 1, gap: 2 }}>
+                    <Stack gap={2} style={layout.fill}>
                       <T w={700} size={15}>
-                        {add ? 'Aporte directo' : 'Actualización de saldo'}
+                        {add ? t('savings.history.add') : t('savings.history.update')}
                       </T>
                       <T size={12.5} color={C.muted}>
-                        {shortDate(e.date)} · Saldo {fmt(e.after)}
+                        {joinMeta(shortDate(e.date), t('savings.history.balance', { amount: fmt(e.after) }))}
                       </T>
-                    </View>
+                    </Stack>
                     <T w={800} size={15} tabular color={e.delta < 0 ? C.out : C.in}>
                       {signed(e.delta)}
                     </T>
@@ -286,20 +302,26 @@ export default function Ahorro() {
               })
             )}
           </Card>
-        </View>
+        </Stack>
       </Screen>
 
-      <Sheet visible={!!sheet} onClose={close} title={sheet === 'goal' && goal ? `Aportar a ${goal.name}` : sheet ? TITLES[sheet] : ''}>
+      <Sheet visible={!!sheet} onClose={close} title={sheetTitle}>
         {sheet !== 'newGoal' && (
           <Row style={st.ref}>
-            <View style={{ flex: 1, gap: 2 }}>
+            <Stack gap={2} style={layout.fill}>
               <T w={700} size={13}>
-                {sheet === 'update' ? 'Saldo anterior' : goal ? 'Llevas en esta meta' : 'Ahorro actual'}
+                {sheet === 'update'
+                  ? t('savings.sheet.previousBalance')
+                  : goal
+                    ? t('savings.sheet.goalSaved')
+                    : t('savings.sheet.currentSavings')}
               </T>
               <T size={12} color={C.muted}>
-                {goal ? `Meta: ${fmt(goal.target)}` : `Registrado el ${lastDate}`}
+                {goal
+                  ? t('savings.sheet.goalTarget', { amount: fmt(goal.target) })
+                  : t('savings.sheet.recordedOn', { date: lastDate })}
               </T>
-            </View>
+            </Stack>
             <T w={800} size={16} tabular>
               {fmt(goal ? goal.saved : balance)}
             </T>
@@ -307,51 +329,55 @@ export default function Ahorro() {
         )}
 
         {sheet === 'newGoal' && (
-          <View style={{ gap: 6 }}>
+          <Stack gap={6}>
             <T w={800} size={14}>
-              ¿Para qué estás ahorrando?
+              {t('savings.sheet.goalName')}
             </T>
-            <Field value={nameInput} onChangeText={(t) => setNameInput(t.slice(0, 40))} placeholder="Ej. Viaje, portátil, matrícula" />
-          </View>
+            <Field
+              value={nameInput}
+              onChangeText={(text) => setNameInput(text.slice(0, 40))}
+              placeholder={t('savings.sheet.goalNamePlaceholder')}
+            />
+          </Stack>
         )}
 
-        <View style={{ gap: 6 }}>
+        <Stack gap={6}>
           <T w={800} size={14}>
-            {sheet ? INPUT_LABELS[sheet] : ''}
+            {sheet ? t(`savings.sheet.input.${sheet}`) : ''}
           </T>
-          <View style={st.amountBox}>
-            <AmountField size={40} value={dots(input)} onChangeText={(t) => setInput(cleanAmount(t))} color={C.inDark} />
+          <View style={common.amountBox}>
+            <AmountField size={40} value={dots(input)} onChangeText={(text) => setInput(cleanAmount(text))} color={C.inDark} />
           </View>
-        </View>
+        </Stack>
 
         {(sheet === 'add' || sheet === 'goal') && (
           <Row gap={8}>
-            {[50000, 100000, 200000].map((v) => (
+            {QUICK_AMOUNTS.map((v) => (
               <Tap key={v} style={st.quick} onPress={() => setInput(String((Number(input) || 0) + v))}>
                 <T w={800} size={13.5}>
-                  + {v / 1000} mil
+                  {t('savings.sheet.quickAdd', { n: v / 1000 })}
                 </T>
               </Tap>
             ))}
           </Row>
         )}
 
-        <Row style={[st.preview, { backgroundColor: previewNeg ? C.outSoft : sheet === 'newGoal' || !input ? C.chip : C.inSoft }]}>
-          <T w={700} size={13.5} color={previewNeg ? C.warn : C.inDark} style={{ flex: 1 }}>
+        <Row style={[st.preview, previewStyle]}>
+          <T w={700} size={13.5} color={previewColor} style={layout.fill}>
             {previewTitle}
           </T>
-          <T w={800} size={16} tabular color={previewNeg ? C.warn : C.inDark}>
+          <T w={800} size={16} tabular color={previewColor}>
             {previewValue}
           </T>
         </Row>
 
-        <PrimaryButton label={sheet ? CONFIRM_LABELS[sheet] : ''} bg={C.in} disabled={cantSave} onPress={confirm} />
+        <PrimaryButton label={sheet ? t(`savings.sheet.confirm.${sheet}`) : ''} bg={C.in} disabled={cantSave} onPress={confirm} />
       </Sheet>
     </View>
   );
 }
 
-function ActionTile({ icon, title, desc, onPress }: { icon: React.ReactNode; title: string; desc: string; onPress: () => void }) {
+function ActionTile({ icon, title, desc, onPress }: { icon: ReactNode; title: string; desc: string; onPress: () => void }) {
   return (
     <Tap onPress={onPress} style={st.action}>
       <View style={st.actionIcon}>{icon}</View>
@@ -364,37 +390,3 @@ function ActionTile({ icon, title, desc, onPress }: { icon: React.ReactNode; tit
     </Tap>
   );
 }
-
-const st = StyleSheet.create({
-  hero: { backgroundColor: C.inDark, borderRadius: 24, padding: 22, gap: 18 },
-  heroTile: { flex: 1, backgroundColor: C.in, borderRadius: 16, padding: 14, gap: 4 },
-  action: { flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 14, gap: 4 },
-  actionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: C.inSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  newGoal: {
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: 22,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  goal: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 16, gap: 14 },
-  goalIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: C.inSoft, alignItems: 'center', justifyContent: 'center' },
-  contribute: { height: 40, paddingHorizontal: 16, borderRadius: 12, backgroundColor: C.in, justifyContent: 'center' },
-  histIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  ref: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 16, padding: 14, gap: 12 },
-  amountBox: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.line, paddingVertical: 14 },
-  quick: { flex: 1, height: 44, borderRadius: 12, backgroundColor: C.card, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
-  preview: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
-});

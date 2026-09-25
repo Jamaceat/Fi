@@ -1,24 +1,29 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePicker } from '@/components/calendar';
 import { draftValues, FixedForm, kindPatch, newFixedDraft, type FixedDraft } from '@/components/fixed-form';
 import { IconCalendar, IconClose, IconTrash } from '@/components/icons';
-import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, T, Tap } from '@/components/ui';
+import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, Stack, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { deleteMovement, getMovement, insertFixed, insertMovement, updateMovement, type Movement } from '@/db/repo';
+import { t, tList } from '@/i18n';
 import { fromISO, longDate, periodOf, periodRange, todayISO, weekdayOf } from '@/lib/dates';
 import { cleanAmount, dots } from '@/lib/format';
 import type { Kind } from '@/lib/schedule';
 import { useApp } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/nuevo.styles';
 
-const CATS: Record<Kind, string[]> = {
-  gasto: ['Mercado', 'Vivienda', 'Servicios', 'Transporte', 'Salud', 'Ocio', 'Ropa', 'Educación', 'Otros'],
-  ingreso: ['Salario', 'Freelance', 'Ventas', 'Inversiones', 'Regalos', 'Otros'],
-};
+type Freq = 'ocasional' | 'fijo';
+
+const FREQS: Freq[] = ['ocasional', 'fijo'];
+
+const categoriesOf = (kind: Kind) => tList(`categories.movement.${kind}`);
+const defaultCategory = (kind: Kind) => t(`categories.movementDefault.${kind}`);
 
 export default function Nuevo() {
   const db = useSQLiteContext();
@@ -26,19 +31,20 @@ export default function Nuevo() {
   const { settings, bump } = useApp();
   // `date` y `kind` preseleccionan un movimiento nuevo (p. ej. desde el calendario).
   const { id, date: dateParam, kind } = useLocalSearchParams<{ id?: string; date?: string; kind?: string }>();
+  const initialKind: Kind = kind === 'ingreso' ? 'ingreso' : 'gasto';
   const initialDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayISO();
 
   const [editing, setEditing] = useState<Movement | null>(null);
-  const [tipo, setTipo] = useState<Kind>(kind === 'ingreso' ? 'ingreso' : 'gasto');
-  const [freq, setFreq] = useState<'ocasional' | 'fijo'>('ocasional');
-  const [cat, setCat] = useState(kind === 'ingreso' ? 'Salario' : 'Mercado');
+  const [tipo, setTipo] = useState<Kind>(initialKind);
+  const [freq, setFreq] = useState<Freq>('ocasional');
+  const [cat, setCat] = useState(() => defaultCategory(initialKind));
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(initialDate);
   const [note, setNote] = useState('');
   // Ocasional: ya pagado/recibido o pendiente.
   const [paid, setPaid] = useState(true);
   // Fijo: mismo formulario que Fijos > Agregar. Tipo y monto se comparten con esta pantalla.
-  const [fx, setFx] = useState<FixedDraft>(() => newFixedDraft(kind === 'ingreso' ? 'ingreso' : 'gasto', settings, initialDate));
+  const [fx, setFx] = useState<FixedDraft>(() => newFixedDraft(initialKind, settings, initialDate));
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -60,7 +66,8 @@ export default function Nuevo() {
   const g = tipo === 'gasto';
   const accent = g ? C.out : C.in;
   const linked = editing?.fixed_id != null;
-  const cats = CATS[tipo].includes(cat) ? CATS[tipo] : [...CATS[tipo], cat];
+  const kindCats = categoriesOf(tipo);
+  const cats = kindCats.includes(cat) ? kindCats : [...kindCats, cat];
   const n = Number(amount) || 0;
   const isFixed = freq === 'fijo' && !editing;
   const fxDraft: FixedDraft = { ...fx, kind: tipo, amount, category: cat };
@@ -68,10 +75,10 @@ export default function Nuevo() {
   // El fijo arranca en el periodo de la fecha elegida (hoy, o el día tocado en el calendario).
   const fixedStart = periodRange(periodOf(date, settings.monthStart), settings.monthStart).from;
 
-  const pickTipo = (t: Kind) => {
-    setTipo(t);
-    setCat(t === 'gasto' ? 'Mercado' : 'Salario');
-    setFx((prev) => ({ ...prev, ...kindPatch(prev, t, true, settings) }));
+  const pickTipo = (next: Kind) => {
+    setTipo(next);
+    setCat(defaultCategory(next));
+    setFx((prev) => ({ ...prev, ...kindPatch(prev, next, true, settings) }));
   };
 
   const pickDate = (iso: string) => {
@@ -113,106 +120,89 @@ export default function Nuevo() {
 
   const remove = () => {
     if (!editing) return;
-    Alert.alert(
-      '¿Eliminar este movimiento?',
-      linked ? 'El fijo volverá a quedar pendiente en ese mes.' : 'Esta acción no se puede deshacer.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteMovement(db, editing.id);
-            bump();
-            router.back();
-          },
+    Alert.alert(t('newMovement.deleteTitle'), linked ? t('newMovement.deleteLinked') : t('newMovement.deleteText'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: async () => {
+          await deleteMovement(db, editing.id);
+          bump();
+          router.back();
         },
-      ],
-    );
+      },
+    ]);
   };
 
-  const saveLabel = editing
-    ? 'Guardar cambios'
-    : freq === 'fijo'
-      ? g
-        ? 'Crear gasto fijo'
-        : 'Crear ingreso fijo'
-      : g
-        ? 'Guardar gasto'
-        : 'Guardar ingreso';
+  const saveLabel = editing ? t('common.saveChanges') : t(`newMovement.save.${freq}.${tipo}`);
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={layout.screen}>
       <Screen bottom={140} gap={20}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <RoundButton label="Cerrar" onPress={() => router.back()}>
+        <Row style={layout.between}>
+          <RoundButton label={t('common.close')} onPress={() => router.back()}>
             <IconClose />
           </RoundButton>
           <T w={800} size={16}>
-            {editing ? 'Editar movimiento' : 'Nuevo movimiento'}
+            {editing ? t('newMovement.editTitle') : t('newMovement.newTitle')}
           </T>
           {editing ? (
-            <RoundButton label="Eliminar movimiento" onPress={remove}>
+            <RoundButton label={t('newMovement.deleteLabel')} onPress={remove}>
               <IconTrash color={C.danger} />
             </RoundButton>
           ) : (
-            <View style={{ width: 44 }} />
+            <View style={st.topSpacer} />
           )}
         </Row>
 
         {!linked && (
           <Segmented
             options={[
-              { id: 'gasto', label: 'Gasto', activeBg: C.out, activeFg: '#FFFFFF' },
-              { id: 'ingreso', label: 'Ingreso', activeBg: C.in, activeFg: '#FFFFFF' },
+              { id: 'gasto', label: t('common.expense'), activeBg: C.out, activeFg: C.white },
+              { id: 'ingreso', label: t('common.income'), activeBg: C.in, activeFg: C.white },
             ]}
             value={tipo}
             onChange={pickTipo}
           />
         )}
 
-        <View style={{ alignItems: 'center', gap: 6, paddingTop: 8 }}>
+        <View style={st.amount}>
           <T w={700} size={13} color={C.muted}>
-            Monto
+            {t('newMovement.amount')}
           </T>
-          <AmountField value={dots(amount)} onChangeText={(t) => setAmount(cleanAmount(t))} color={accent} autoFocus={!id} />
+          <AmountField value={dots(amount)} onChangeText={(text) => setAmount(cleanAmount(text))} color={accent} autoFocus={!id} />
         </View>
 
         {!editing && (
-          <View style={{ gap: 10 }}>
+          <Stack gap={10}>
             <T w={800} size={14}>
-              Frecuencia
+              {t('newMovement.frequency')}
             </T>
             <Row gap={10}>
-              {(
-                [
-                  ['ocasional', 'Ocasional', 'Solo esta vez'],
-                  ['fijo', 'Fijo', 'Se repite'],
-                ] as const
-              ).map(([fid, title, desc]) => {
+              {FREQS.map((fid) => {
                 const on = freq === fid;
                 return (
                   <Tap
                     key={fid}
                     onPress={() => setFreq(fid)}
                     accessibilityState={{ selected: on }}
-                    style={[st.freq, { borderColor: on ? accent : C.line, borderWidth: on ? 2 : 1 }]}>
+                    style={[st.freq, on && [st.freqOn, { borderColor: accent }]]}>
                     <T w={800} size={14.5}>
-                      {title}
+                      {t(`newMovement.freq.${fid}.title`)}
                     </T>
                     <T size={12.5} color={C.muted}>
-                      {desc}
+                      {t(`newMovement.freq.${fid}.desc`)}
                     </T>
                   </Tap>
                 );
               })}
             </Row>
-          </View>
+          </Stack>
         )}
 
-        <View style={{ gap: 10 }}>
+        <Stack gap={10}>
           <T w={800} size={14}>
-            Categoría
+            {t('newMovement.category')}
           </T>
           <View style={st.grid}>
             {cats.map((c) => {
@@ -223,104 +213,68 @@ export default function Nuevo() {
                   onPress={() => setCat(c)}
                   accessibilityState={{ selected: on }}
                   style={[st.cat, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
-                  <T w={700} size={13} color={on ? '#FFFFFF' : C.ink} numberOfLines={1}>
+                  <T w={700} size={13} color={on ? C.white : C.ink} numberOfLines={1}>
                     {c}
                   </T>
                 </Tap>
               );
             })}
           </View>
-        </View>
+        </Stack>
 
-        <View style={{ gap: 10 }}>
-          <View style={{ gap: 6 }}>
+        <Stack gap={10}>
+          <Stack gap={6}>
             <T w={800} size={14}>
-              {isFixed ? (g ? 'Primer pago' : 'Primer ingreso') : 'Fecha'}
+              {isFixed ? t(`newMovement.firstDate.${tipo}`) : t('newMovement.date')}
             </T>
-            <Tap onPress={() => setDateOpen(true)} style={st.dateBtn}>
+            <Tap onPress={() => setDateOpen(true)} style={common.dateBtn}>
               <T w={600} size={14.5}>
-                {date === todayISO() ? `Hoy · ${longDate(date)}` : longDate(date)}
+                {date === todayISO() ? t('newMovement.todayDate', { date: longDate(date) }) : longDate(date)}
               </T>
               <IconCalendar color={C.muted} />
             </Tap>
-          </View>
+          </Stack>
           {!isFixed && (
-            <View style={{ gap: 6 }}>
+            <Stack gap={6}>
               <T w={800} size={14}>
-                Nota{' '}
+                {t('newMovement.note')}{' '}
                 <T w={500} size={14} color={C.muted}>
-                  (opcional)
+                  {t('common.optional')}
                 </T>
               </T>
-              <Field value={note} onChangeText={(t) => setNote(t.slice(0, 60))} placeholder="Ej. mercado de la semana" />
-            </View>
+              <Field value={note} onChangeText={(text) => setNote(text.slice(0, 60))} placeholder={t('newMovement.notePlaceholder')} />
+            </Stack>
           )}
-        </View>
+        </Stack>
 
         {isFixed && (
           <FixedForm d={fxDraft} set={setFxPatch} startDate={fixedStart} accent={accent} hideAmount hideCategory nameOptional />
         )}
 
         {freq === 'ocasional' && !linked && (
-          <View style={{ gap: 6 }}>
+          <Stack gap={6}>
             <T w={800} size={14}>
-              {g ? '¿Ya lo pagaste?' : '¿Ya lo recibiste?'}
+              {t(`newMovement.paidQuestion.${tipo}`)}
             </T>
             <Segmented
               options={[
-                { id: 'si', label: g ? 'Sí, pagado' : 'Sí, recibido', activeBg: accent, activeFg: '#FFFFFF' },
-                { id: 'no', label: g ? 'No, pendiente' : 'No, por recibir' },
+                { id: 'si', label: t(`newMovement.paidYes.${tipo}`), activeBg: accent, activeFg: C.white },
+                { id: 'no', label: t(`newMovement.paidNo.${tipo}`) },
               ]}
               value={paid ? 'si' : 'no'}
               onChange={(v) => setPaid(v === 'si')}
             />
-          </View>
+          </Stack>
         )}
       </Screen>
 
-      <View style={[st.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[common.footer, { paddingBottom: insets.bottom + 16 }]}>
         <PrimaryButton label={saveLabel} bg={accent} disabled={n <= 0 || saving} onPress={save} />
       </View>
 
-      <Sheet visible={dateOpen} onClose={() => setDateOpen(false)} title="Fecha">
+      <Sheet visible={dateOpen} onClose={() => setDateOpen(false)} title={t('newMovement.date')}>
         <DatePicker value={date} onChange={pickDate} filter={tipo} />
       </Sheet>
     </View>
   );
 }
-
-const st = StyleSheet.create({
-  freq: { flex: 1, minHeight: 72, padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  cat: {
-    width: '31.5%',
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  dateBtn: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingTop: 14,
-    paddingHorizontal: 20,
-    backgroundColor: C.bg,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
-  },
-});

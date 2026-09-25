@@ -1,5 +1,7 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 
+import { t } from '@/i18n';
+
 /** true si el dispositivo tiene huella/rostro o PIN configurado. */
 export async function canLock() {
   const [hw, enrolled] = await Promise.all([
@@ -10,6 +12,6 @@ export async function canLock() {
 }
 
 export async function authenticate() {
-  const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Desbloquea Mis finanzas' });
+  const r = await LocalAuthentication.authenticateAsync({ promptMessage: t('lock.prompt') });
   return r.success;
 }

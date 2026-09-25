@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedReaction,
@@ -13,14 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { IconChevronLeft, IconChevronRight, IconGear, IconGrip, IconRefresh } from '@/components/icons';
-import { Header, PrimaryButton, Row, T, Tap } from '@/components/ui';
+import { Header, PrimaryButton, Row, Stack, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { DEFAULT_SETTINGS, HOME_BLOCKS, type HomeBlock } from '@/db/repo';
+import { t } from '@/i18n';
 import { useApp } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { GAP, ITEM_H, styles as st } from '@/styles/screens/orden-inicio.styles';
 
-/** Alto de cada bloque en la maqueta y espacio entre ellos. */
-const ITEM_H = 66;
-const GAP = 8;
 const SLOT = ITEM_H + GAP;
 const SPRING = { damping: 20, stiffness: 220 };
 
@@ -31,15 +31,16 @@ const toPositions = (order: HomeBlock[]) => Object.fromEntries(order.map((id, i)
 const toOrder = (pos: Positions) => [...HOME_BLOCKS].sort((a, b) => pos[a] - pos[b]);
 
 /** Cómo se ve cada bloque en miniatura: colores del bloque real de Inicio. */
+type Look = { bg: string; fg: string; sub: string; border?: string };
 const DARK = { fg: C.bg, sub: C.heroSub };
 const LIGHT = { bg: C.card, fg: C.ink, sub: C.muted, border: C.line };
-const META: Record<HomeBlock, { title: string; desc: string; bg: string; fg: string; sub: string; border?: string }> = {
-  hero: { title: 'Balance del mes', desc: 'Disponible, ingresos y gastos', bg: C.hero, ...DARK },
-  savings: { title: 'Ahorro total', desc: 'Saldo y lo ahorrado este mes', bg: C.inDark, fg: '#F4F8FB', sub: C.inSub },
-  pending: { title: 'Ingreso fijo pendiente', desc: 'Solo aparece si falta uno por recibir', ...LIGHT },
-  calendar: { title: 'Calendario', desc: 'Pagos y festivos del mes', ...LIGHT },
-  breakdown: { title: 'Gastos e ingresos', desc: 'Fijos frente a ocasionales', ...LIGHT },
-  recent: { title: 'Últimos movimientos', desc: 'Los 4 más recientes', ...LIGHT },
+const LOOKS: Record<HomeBlock, Look> = {
+  hero: { bg: C.hero, ...DARK },
+  savings: { bg: C.inDark, fg: C.inHeroText, sub: C.inSub },
+  pending: LIGHT,
+  calendar: LIGHT,
+  breakdown: LIGHT,
+  recent: LIGHT,
 };
 
 export default function OrdenInicio() {
@@ -80,21 +81,20 @@ export default function OrdenInicio() {
   return (
     <ScrollView
       scrollEnabled={!dragging}
-      style={{ flex: 1, backgroundColor: C.bg }}
-      contentContainerStyle={{ paddingTop: insets.top + 16, paddingHorizontal: 20, paddingBottom: insets.bottom + 32, gap: 18 }}>
-      <Header onBack={() => router.back()} kicker="Ajustes" title="Orden de Inicio" />
+      style={st.screen}
+      contentContainerStyle={[st.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 }]}>
+      <Header onBack={() => router.back()} kicker={t('settings.title')} title={t('homeOrder.title')} />
 
-      <T size={13.5} color={C.muted} style={{ lineHeight: 20 }}>
-        Mantén presionado un bloque y arrástralo para cambiar su lugar. El encabezado y la alerta de gasto siempre van
-        arriba.
+      <T size={13.5} color={C.muted} style={st.intro}>
+        {t('homeOrder.intro')}
       </T>
 
       <View style={st.phone}>
-        <Row style={{ justifyContent: 'space-between', paddingHorizontal: 4 }}>
-          <View style={{ gap: 4 }}>
-            <View style={[st.bar, { width: 70, backgroundColor: C.line }]} />
-            <View style={[st.bar, { width: 110, height: 12, backgroundColor: C.ring }]} />
-          </View>
+        <Row style={st.phoneHeader}>
+          <Stack gap={4}>
+            <View style={[st.bar, st.barKicker]} />
+            <View style={[st.bar, st.barTitle]} />
+          </Stack>
           <Row gap={5}>
             {[IconChevronLeft, IconChevronRight, IconGear].map((Icon, i) => (
               <View key={i} style={st.miniRound}>
@@ -119,18 +119,18 @@ export default function OrdenInicio() {
         </View>
       </View>
 
-      <View style={{ gap: 10 }}>
-        <PrimaryButton label="Guardar orden" onPress={save} disabled={!dirty} />
+      <Stack gap={10}>
+        <PrimaryButton label={t('homeOrder.save')} onPress={save} disabled={!dirty} />
         <Tap
           onPress={isDefault ? undefined : () => apply([...DEFAULT_SETTINGS.homeOrder])}
           accessibilityState={{ disabled: isDefault }}
-          style={[st.reset, { opacity: isDefault ? 0.45 : 1 }]}>
+          style={[common.outlineBtn, isDefault && common.disabled]}>
           <IconRefresh size={17} />
           <T w={800} size={14.5}>
-            Restablecer orden original
+            {t('homeOrder.reset')}
           </T>
         </Tap>
-      </View>
+      </Stack>
     </ScrollView>
   );
 }
@@ -150,7 +150,8 @@ function Item({
   onDrop: (pos: Positions) => void;
   onMove: (delta: number) => void;
 }) {
-  const m = META[id];
+  const look = LOOKS[id];
+  const title = t(`homeOrder.blocks.${id}.title`);
   const count = HOME_BLOCKS.length;
   const top = useSharedValue(index * SLOT);
   const startTop = useSharedValue(0);
@@ -206,71 +207,29 @@ function Item({
     <GestureDetector gesture={pan}>
       <Animated.View
         accessible
-        accessibilityLabel={`${m.title}, posición ${index + 1} de ${count}`}
-        accessibilityHint="Usa las acciones Subir o Bajar para moverlo"
+        accessibilityLabel={t('homeOrder.a11y.position', { title, position: index + 1, count })}
+        accessibilityHint={t('homeOrder.a11y.hint')}
         accessibilityActions={[
-          { name: 'up', label: 'Subir' },
-          { name: 'down', label: 'Bajar' },
+          { name: 'up', label: t('homeOrder.a11y.up') },
+          { name: 'down', label: t('homeOrder.a11y.down') },
         ]}
         onAccessibilityAction={(e) => onMove(e.nativeEvent.actionName === 'up' ? -1 : 1)}
-        style={[st.item, { backgroundColor: m.bg, borderColor: m.border ?? m.bg }, style]}>
-        <View style={[st.badge, { backgroundColor: m.border ? C.chip : 'rgba(255,255,255,0.14)' }]}>
-          <T w={800} size={12} color={m.fg}>
+        style={[st.item, { backgroundColor: look.bg, borderColor: look.border ?? look.bg }, style]}>
+        <View style={[st.badge, look.border ? st.badgeLight : st.badgeDark]}>
+          <T w={800} size={12} color={look.fg}>
             {index + 1}
           </T>
         </View>
-        <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
-          <T w={800} size={14} color={m.fg} numberOfLines={1}>
-            {m.title}
+        <Stack gap={2} style={layout.fillShrink}>
+          <T w={800} size={14} color={look.fg} numberOfLines={1}>
+            {title}
           </T>
-          <T w={600} size={12} color={m.sub} numberOfLines={1}>
-            {m.desc}
+          <T w={600} size={12} color={look.sub} numberOfLines={1}>
+            {t(`homeOrder.blocks.${id}.desc`)}
           </T>
-        </View>
-        <IconGrip size={20} color={m.sub} />
+        </Stack>
+        <IconGrip size={20} color={look.sub} />
       </Animated.View>
     </GestureDetector>
   );
 }
-
-const st = StyleSheet.create({
-  phone: { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.ring, borderRadius: 28, padding: 12, paddingTop: 16, gap: 14 },
-  bar: { height: 8, borderRadius: 4 },
-  miniRound: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  item: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: ITEM_H,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-  },
-  badge: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  reset: {
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-});

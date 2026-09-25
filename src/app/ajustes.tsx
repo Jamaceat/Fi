@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, View } from 'react-native';
 
 import {
   IconCalendar,
@@ -12,27 +12,34 @@ import {
   IconRefresh,
   IconTrash,
 } from '@/components/icons';
-import { Field, Header, RadioDot, Row, Screen, Stepper, SwitchRow, T, Tap, Toast } from '@/components/ui';
+import { Field, Header, RadioDot, Row, Screen, Stack, Stepper, SwitchRow, T, Tap, Toast } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
+import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
 import { longDate, toISO } from '@/lib/dates';
 import { exportCsv } from '@/lib/export';
-import { describePreset, PRESETS, UNITS, type Kind, type Preset } from '@/lib/schedule';
+import { describePreset, presetName, PRESETS, unitLabel, UNITS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/ajustes.styles';
 
-const CACHE_OPTS = [
-  [7, '1 semana'],
-  [30, '1 mes'],
-  [90, '3 meses'],
-  [180, '6 meses'],
-  [365, '1 año'],
+const CACHE_DAYS = [7, 30, 90, 180, 365] as const;
+
+const PRESET_OPTS: Preset[] = [...PRESETS.map((p) => p.id), 'custom'];
+
+const HOLIDAY_RULES: HolidayRule[] = ['mantener', 'antes', 'despues'];
+
+/** Hora guardada → clave de su etiqueta. */
+const HOURS = [
+  ['7:00', 'morning'],
+  ['12:00', 'noon'],
+  ['19:00', 'evening'],
 ] as const;
 
-const PRESET_OPTS: { id: Preset; label: string }[] = [
-  ...PRESETS.map((p) => ({ id: p.id, label: p.name })),
-  { id: 'custom', label: 'Personalizada' },
-];
+const KINDS: Kind[] = ['gasto', 'ingreso'];
+
+type ToastState = { title: string; text: string; warn?: boolean };
 
 export default function Ajustes() {
   const db = useSQLiteContext();
@@ -41,7 +48,7 @@ export default function Ajustes() {
   const [open, setOpen] = useState<Kind | null>(null);
   const [wiping, setWiping] = useState(false);
   const [wipeText, setWipeText] = useState('');
-  const [toast, setToast] = useState<{ title: string; text: string; warn?: boolean } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const setDef = (kind: Kind, patch: Partial<DefaultPeriod>) =>
     updateSettings({ defs: { ...s.defs, [kind]: { ...s.defs[kind], ...patch } } });
@@ -50,7 +57,7 @@ export default function Ajustes() {
   const toggleLock = async () => {
     if (s.lock) return updateSettings({ lock: false });
     if (!(await canLock())) {
-      Alert.alert('No disponible', 'Configura una huella, rostro o PIN en tu teléfono para usar el bloqueo.');
+      Alert.alert(t('settings.lock.unavailableTitle'), t('settings.lock.unavailableText'));
       return;
     }
     if (await authenticate()) updateSettings({ lock: true });
@@ -59,9 +66,9 @@ export default function Ajustes() {
   const doExport = async () => {
     try {
       const name = await exportCsv(db);
-      setToast({ title: 'Exportación lista', text: `${name} con todos tus datos` });
+      setToast({ title: t('settings.data.exported'), text: t('settings.data.exportedText', { name }) });
     } catch (e) {
-      setToast({ warn: true, title: 'No se pudo exportar', text: String(e) });
+      setToast({ warn: true, title: t('settings.data.exportFailed'), text: String(e) });
     }
   };
 
@@ -73,104 +80,117 @@ export default function Ajustes() {
       const r = await refreshHolidays();
       setToast(
         r.failed
-          ? { warn: true, title: 'No se pudieron actualizar', text: 'Revisa tu conexión. Se siguen usando los festivos guardados.' }
-          : { title: 'Festivos actualizados', text: `${r.updated} ${r.updated === 1 ? 'año descargado' : 'años descargados'} de Nager.Date.` },
+          ? { warn: true, title: t('settings.holidays.failed'), text: t('settings.holidays.failedText') }
+          : { title: t('settings.holidays.updated'), text: t('settings.holidays.updatedText', { count: r.updated }) },
       );
     } finally {
       setRefreshing(false);
     }
   };
 
-  const cantWipe = wipeText.trim().toUpperCase() !== 'BORRAR';
+  const wipeWord = t('settings.data.wipeWord');
+  const cantWipe = wipeText.trim().toUpperCase() !== wipeWord;
+  const closeWipe = () => {
+    setWiping(false);
+    setWipeText('');
+  };
   const doWipe = async () => {
     if (cantWipe) return;
     await wipeData(db);
     bump();
-    setWiping(false);
-    setWipeText('');
-    setToast({ warn: true, title: 'Datos borrados', text: 'La app quedó en cero. Tus ajustes se mantienen.' });
+    closeWipe();
+    setToast({ warn: true, title: t('settings.data.wiped'), text: t('settings.data.wipedText') });
   };
+
+  const holidaySummary =
+    holidays.size > 0
+      ? years.length
+        ? t('settings.holidays.savedRange', { count: holidays.size, from: years[0], to: years.at(-1)! })
+        : t('settings.holidays.saved', { count: holidays.size })
+      : t('settings.holidays.none');
 
   return (
     <Screen bottom={48}>
-      <Header onBack={() => router.back()} kicker="Mis finanzas" title="Ajustes" />
+      <Header onBack={() => router.back()} kicker={t('app.name')} title={t('settings.title')} />
 
       {toast && <Toast title={toast.title} text={toast.text} warn={toast.warn} onClose={() => setToast(null)} />}
 
-      <View style={{ gap: 10 }}>
-        <View style={{ gap: 4 }}>
+      <Stack gap={10}>
+        <Stack gap={4}>
           <T w={800} size={16}>
-            Periodicidad por defecto
+            {t('settings.defaults.title')}
           </T>
           <T size={12.5} color={C.muted}>
-            Se preselecciona al crear un fijo nuevo. Puedes cambiarla en cada uno.
+            {t('settings.defaults.text')}
           </T>
-        </View>
-        <View style={st.box}>
-          {(['gasto', 'ingreso'] as const).map((kind, i) => {
+        </Stack>
+        <View style={common.box}>
+          {KINDS.map((kind, i) => {
             const d = s.defs[kind];
             const isG = kind === 'gasto';
             const accent = isG ? C.ink : C.in;
             const custom = d.preset === 'custom';
             const isOpen = open === kind;
             return (
-              <View key={kind} style={i > 0 && st.divider}>
+              <View key={kind} style={i > 0 && common.divider}>
                 <Tap onPress={() => setOpen(isOpen ? null : kind)} style={st.defRow} accessibilityState={{ expanded: isOpen }}>
-                  <View style={[st.defIcon, { backgroundColor: isG ? '#EFEBE4' : C.inSoft }]}>
+                  <View style={[st.defIcon, isG ? st.defIconOut : st.defIconIn]}>
                     <IconCalendar color={isG ? C.ink : C.inDark} />
                   </View>
-                  <View style={{ flex: 1, gap: 1 }}>
+                  <Stack gap={1} style={layout.fill}>
                     <T w={700} size={14.5}>
-                      {isG ? 'Gastos fijos' : 'Ingresos fijos'}
+                      {t(`settings.defaults.kind.${kind}`)}
                     </T>
                     <T w={600} size={12.5} color={C.muted}>
                       {describePreset(d.preset, d.n, d.unit)}
                     </T>
-                  </View>
-                  <View style={{ transform: [{ rotate: isOpen ? '180deg' : '0deg' }] }}>
+                  </Stack>
+                  <View style={isOpen && st.chevronOpen}>
                     <IconChevronDown size={16} color={C.faint} />
                   </View>
                 </Tap>
                 {isOpen && (
-                  <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 12 }}>
+                  <View style={st.defPanel}>
                     <View style={st.optGrid}>
-                      {PRESET_OPTS.map((p) => {
-                        const sel = p.id === d.preset;
+                      {PRESET_OPTS.map((id) => {
+                        const sel = id === d.preset;
                         return (
                           <Tap
-                            key={p.id}
-                            onPress={() => setDef(kind, { preset: p.id })}
+                            key={id}
+                            onPress={() => setDef(kind, { preset: id })}
+                            accessibilityState={{ selected: sel }}
                             style={[st.opt, { backgroundColor: sel ? accent : C.card, borderColor: sel ? accent : C.line }]}>
-                            <T w={700} size={13} color={sel ? '#FFFFFF' : C.ink}>
-                              {p.label}
+                            <T w={700} size={13} color={sel ? C.white : C.ink}>
+                              {presetName(id)}
                             </T>
                           </Tap>
                         );
                       })}
                     </View>
-                    <View style={{ gap: 10, opacity: custom ? 1 : 0.7 }}>
-                      <Row style={{ justifyContent: 'space-between' }}>
+                    <View style={[st.customPanel, !custom && st.customPanelOff]}>
+                      <Row style={layout.between}>
                         <T w={700} size={13.5}>
-                          Personalizada: cada
+                          {t('settings.defaults.customEvery')}
                         </T>
                         <Stepper
                           value={String(d.n)}
                           onDec={() => setDef(kind, { n: Math.max(1, d.n - 1), preset: 'custom' })}
                           onInc={() => setDef(kind, { n: Math.min(365, d.n + 1), preset: 'custom' })}
-                          decLabel="Reducir intervalo"
-                          incLabel="Aumentar intervalo"
+                          decLabel={t('fixedForm.intervalDecrease')}
+                          incLabel={t('fixedForm.intervalIncrease')}
                         />
                       </Row>
                       <Row gap={4} style={st.units}>
                         {UNITS.map((u) => {
-                          const sel = u.id === d.unit;
+                          const sel = u === d.unit;
                           return (
                             <Tap
-                              key={u.id}
-                              onPress={() => setDef(kind, { unit: u.id, preset: 'custom' })}
-                              style={[st.unit, sel && { backgroundColor: custom ? accent : C.card }]}>
-                              <T w={800} size={13} color={sel ? (custom ? '#FFFFFF' : C.ink) : C.muted2}>
-                                {u.label}
+                              key={u}
+                              onPress={() => setDef(kind, { unit: u, preset: 'custom' })}
+                              accessibilityState={{ selected: sel }}
+                              style={[st.unit, sel && (custom ? { backgroundColor: accent } : st.unitOn)]}>
+                              <T w={800} size={13} color={sel ? (custom ? C.white : C.ink) : C.muted2}>
+                                {unitLabel(u)}
                               </T>
                             </Tap>
                           );
@@ -183,62 +203,61 @@ export default function Ajustes() {
             );
           })}
         </View>
-      </View>
+      </Stack>
 
-      <View style={{ gap: 10 }}>
+      <Stack gap={10}>
         <T w={800} size={16}>
-          Mes y fechas
+          {t('settings.month.title')}
         </T>
-        <View style={[st.box, { paddingHorizontal: 14 }]}>
-          <Row gap={12} style={{ paddingVertical: 12 }}>
-            <View style={{ flex: 1, gap: 2 }}>
+        <View style={[common.box, common.boxPadded]}>
+          <Row gap={12} style={st.settingRow}>
+            <Stack gap={2} style={layout.fill}>
               <T w={700} size={14.5}>
-                Tu mes empieza el día
+                {t('settings.month.start')}
               </T>
               <T size={12.5} color={C.muted}>
-                Útil si organizas el mes desde tu día de pago.
+                {t('settings.month.startText')}
               </T>
-            </View>
+            </Stack>
             <Stepper
               value={String(s.monthStart)}
               onDec={() => updateSettings({ monthStart: s.monthStart <= 1 ? 28 : s.monthStart - 1 })}
               onInc={() => updateSettings({ monthStart: s.monthStart >= 28 ? 1 : s.monthStart + 1 })}
-              decLabel="Día anterior"
-              incLabel="Día siguiente"
+              decLabel={t('settings.month.prevDay')}
+              incLabel={t('settings.month.nextDay')}
             />
           </Row>
-          <View style={[st.divider, { paddingVertical: 12, gap: 8 }]}>
+          <View style={[common.divider, st.radioGroup]}>
             <T w={700} size={14.5}>
-              Si un fijo cae en fin de semana o festivo
+              {t('settings.month.holidayRule')}
             </T>
-            {(
-              [
-                ['mantener', 'Mantener la fecha'],
-                ['antes', 'Mover al día hábil anterior'],
-                ['despues', 'Mover al día hábil siguiente'],
-              ] as const
-            ).map(([id, label]) => (
-              <RadioOption key={id} label={label} on={s.holiday === id} onPress={() => updateSettings({ holiday: id })} />
+            {HOLIDAY_RULES.map((id) => (
+              <RadioOption
+                key={id}
+                label={t(`settings.month.rules.${id}`)}
+                on={s.holiday === id}
+                onPress={() => updateSettings({ holiday: id })}
+              />
             ))}
           </View>
         </View>
-      </View>
+      </Stack>
 
-      <View style={{ gap: 10 }}>
-        <View style={{ gap: 4 }}>
+      <Stack gap={10}>
+        <Stack gap={4}>
           <T w={800} size={16}>
-            Festivos de Colombia
+            {t('settings.holidays.title')}
           </T>
           <T size={12.5} color={C.muted}>
-            Se descargan de Nager.Date y se guardan en el teléfono. Mientras estén vigentes no se vuelven a pedir.
+            {t('settings.holidays.text')}
           </T>
-        </View>
-        <View style={[st.box, { padding: 14, gap: 12 }]}>
+        </Stack>
+        <View style={[common.box, st.holidayBox]}>
           <T w={700} size={14.5}>
-            Guardar festivos durante
+            {t('settings.holidays.cacheFor')}
           </T>
           <View style={st.optGrid}>
-            {CACHE_OPTS.map(([days, label]) => {
+            {CACHE_DAYS.map((days) => {
               const sel = s.holidayCacheDays === days;
               return (
                 <Tap
@@ -247,96 +266,92 @@ export default function Ajustes() {
                   accessibilityRole="radio"
                   accessibilityState={{ checked: sel }}
                   style={[st.opt, { backgroundColor: sel ? C.holiday : C.card, borderColor: sel ? C.holiday : C.line }]}>
-                  <T w={700} size={13} color={sel ? '#FFFFFF' : C.ink}>
-                    {label}
+                  <T w={700} size={13} color={sel ? C.white : C.ink}>
+                    {t(`settings.holidays.cacheOptions.d${days}`)}
                   </T>
                 </Tap>
               );
             })}
           </View>
-          <Row gap={12} style={[st.divider, { paddingTop: 12 }]}>
-            <View style={[st.defIcon, { backgroundColor: C.holidaySoft }]}>
+          <Row gap={12} style={[common.divider, st.holidayStatus]}>
+            <View style={[st.defIcon, st.defIconHoliday]}>
               <IconCalendar color={C.holidayDark} />
             </View>
-            <View style={{ flex: 1, gap: 2 }}>
+            <Stack gap={2} style={layout.fill}>
               <T w={700} size={14}>
-                {holidays.size > 0
-                  ? `${holidays.size} festivos guardados${years.length ? ` · ${years[0]}–${years.at(-1)}` : ''}`
-                  : 'Aún no hay festivos guardados'}
+                {holidaySummary}
               </T>
               <T size={12.5} color={C.muted}>
-                {lastSync ? `Actualizados el ${longDate(toISO(new Date(lastSync)))}` : 'Se descargan al tener conexión.'}
+                {lastSync
+                  ? t('settings.holidays.lastSync', { date: longDate(toISO(new Date(lastSync))) })
+                  : t('settings.holidays.willDownload')}
               </T>
-            </View>
+            </Stack>
           </Row>
-          <Tap onPress={refreshing ? undefined : doRefresh} style={[st.dataBtn, { height: 46, opacity: refreshing ? 0.5 : 1 }]}>
+          <Tap onPress={refreshing ? undefined : doRefresh} style={[common.outlineBtn, st.refreshBtn, refreshing && st.refreshing]}>
             <IconRefresh size={17} color={C.holidayDark} />
             <T w={800} size={14} color={C.holidayDark}>
-              {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
+              {refreshing ? t('settings.holidays.refreshing') : t('settings.holidays.refresh')}
             </T>
           </Tap>
         </View>
-      </View>
+      </Stack>
 
-      <View style={{ gap: 10 }}>
+      <Stack gap={10}>
         <T w={800} size={16}>
-          Avisos y alertas
+          {t('settings.alerts.title')}
         </T>
-        <View style={[st.box, { paddingHorizontal: 14 }]}>
+        <View style={[common.box, common.boxPadded]}>
           <SwitchRow
             first
-            label="Recordar pagos fijos"
-            desc="Usa la anticipación que definas en cada fijo."
+            label={t('settings.alerts.remindFixed')}
+            desc={t('settings.alerts.remindFixedText')}
             on={s.remindFijos}
             onPress={() => toggle('remindFijos')}
           />
           <SwitchRow
-            label="Alerta de gasto del mes"
-            desc="Te avisa en Inicio cuando tus gastos se acercan a tus ingresos."
+            label={t('settings.alerts.budget')}
+            desc={t('settings.alerts.budgetText')}
             on={s.budgetAlert}
             onPress={() => toggle('budgetAlert')}
           />
           {s.budgetAlert && (
-            <Row style={[st.divider, { paddingVertical: 10 }]}>
-              <T w={700} size={14.5} style={{ flex: 1 }}>
-                Avisar al gastar el
+            <Row style={[common.divider, st.settingRowCompact]}>
+              <T w={700} size={14.5} style={layout.fill}>
+                {t('settings.alerts.budgetAt')}
               </T>
               <Stepper
                 minWidth={56}
-                value={`${s.budget} %`}
+                value={t('settings.alerts.percent', { pct: s.budget })}
                 onDec={() => updateSettings({ budget: Math.max(50, s.budget - 5) })}
                 onInc={() => updateSettings({ budget: Math.min(100, s.budget + 5) })}
-                decLabel="Bajar porcentaje"
-                incLabel="Subir porcentaje"
+                decLabel={t('settings.alerts.percentDown')}
+                incLabel={t('settings.alerts.percentUp')}
               />
             </Row>
           )}
           <SwitchRow
-            label="Resumen semanal"
-            desc="Cada lunes: lo que gastaste y lo que viene."
+            label={t('settings.alerts.weekly')}
+            desc={t('settings.alerts.weeklyText')}
             on={s.weekly}
             onPress={() => toggle('weekly')}
           />
-          <View style={[st.divider, { paddingVertical: 12, gap: 8 }]}>
+          <View style={[common.divider, st.radioGroup]}>
             <T w={700} size={14.5}>
-              Hora de los avisos
+              {t('settings.alerts.hour')}
             </T>
             <Row gap={8}>
-              {(
-                [
-                  ['7:00', '7:00 a. m.'],
-                  ['12:00', '12:00 m.'],
-                  ['19:00', '7:00 p. m.'],
-                ] as const
-              ).map(([id, label]) => {
+              {HOURS.map(([id, key]) => {
                 const sel = s.hour === id;
                 return (
                   <Tap
                     key={id}
                     onPress={() => updateSettings({ hour: id })}
-                    style={[st.hour, { backgroundColor: sel ? C.inSoft : C.card, borderColor: sel ? C.in : C.line }]}>
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: sel }}
+                    style={[st.hour, sel ? st.radioOn : st.radioOff]}>
                     <T w={700} size={13} color={sel ? C.inDark : C.ink}>
-                      {label}
+                      {t(`settings.alerts.hours.${key}`)}
                     </T>
                   </Tap>
                 );
@@ -344,66 +359,66 @@ export default function Ajustes() {
             </Row>
           </View>
         </View>
-      </View>
+      </Stack>
 
-      <View style={{ gap: 10 }}>
+      <Stack gap={10}>
         <T w={800} size={16}>
-          Privacidad y formato
+          {t('settings.privacy.title')}
         </T>
-        <View style={[st.box, { paddingHorizontal: 14 }]}>
+        <View style={[common.box, common.boxPadded]}>
           <SwitchRow
             first
-            label="Ocultar montos en Inicio"
-            desc="Muestra $ •••• hasta que toques el saldo."
+            label={t('settings.privacy.hideAmounts')}
+            desc={t('settings.privacy.hideAmountsText')}
             on={s.hideAmounts}
             onPress={() => toggle('hideAmounts')}
           />
-          <SwitchRow label="Bloquear con huella o PIN" desc="Se pide al abrir la app." on={s.lock} onPress={toggleLock} />
-          <Row gap={12} style={[st.divider, { paddingVertical: 12 }]}>
-            <View style={{ flex: 1, gap: 2 }}>
+          <SwitchRow label={t('settings.privacy.lock')} desc={t('settings.privacy.lockText')} on={s.lock} onPress={toggleLock} />
+          <Row gap={12} style={[common.divider, st.settingRow]}>
+            <Stack gap={2} style={layout.fill}>
               <T w={700} size={14.5}>
-                Moneda
+                {t('settings.privacy.currency')}
               </T>
               <T size={12.5} color={C.muted}>
-                Formato $ 1.250.000
+                {t('settings.privacy.currencyFormat')}
               </T>
-            </View>
+            </Stack>
             <T w={700} size={13} color={C.muted}>
-              Peso colombiano · COP
+              {t('settings.privacy.currencyName')}
             </T>
           </Row>
         </View>
-      </View>
+      </Stack>
 
-      <View style={{ gap: 10 }}>
+      <Stack gap={10}>
         <T w={800} size={16}>
-          Pantalla de inicio
+          {t('settings.home.title')}
         </T>
-        <Tap onPress={() => router.push('/orden-inicio')} style={[st.box, st.defRow]} accessibilityRole="button">
-          <View style={[st.defIcon, { backgroundColor: C.chip }]}>
+        <Tap onPress={() => router.push('/orden-inicio')} style={[common.box, st.defRow]} accessibilityRole="button">
+          <View style={[st.defIcon, st.defIconNeutral]}>
             <IconLayout />
           </View>
-          <View style={{ flex: 1, gap: 1 }}>
+          <Stack gap={1} style={layout.fill}>
             <T w={700} size={14.5}>
-              Cambiar orden de los bloques
+              {t('settings.home.reorder')}
             </T>
             <T w={600} size={12.5} color={C.muted}>
-              Arrastra balance, ahorro, calendario y más en una maqueta.
+              {t('settings.home.reorderText')}
             </T>
-          </View>
+          </Stack>
           <IconChevronRight size={16} color={C.faint} />
         </Tap>
-      </View>
+      </Stack>
 
-      <View style={{ gap: 10 }}>
+      <Stack gap={10}>
         <T w={800} size={16}>
-          Tus datos
+          {t('settings.data.title')}
         </T>
-        <View style={{ gap: 10 }}>
-          <Tap onPress={doExport} style={st.dataBtn}>
+        <Stack gap={10}>
+          <Tap onPress={doExport} style={common.outlineBtn}>
             <IconDownload />
             <T w={800} size={14.5}>
-              Exportar datos (CSV)
+              {t('settings.data.export')}
             </T>
           </Tap>
           {!wiping ? (
@@ -412,46 +427,46 @@ export default function Ajustes() {
                 setWiping(true);
                 setWipeText('');
               }}
-              style={st.dataBtn}>
+              style={common.outlineBtn}>
               <IconTrash color={C.danger} />
               <T w={800} size={14.5} color={C.danger}>
-                Borrar todos los datos
+                {t('settings.data.wipeAll')}
               </T>
             </Tap>
           ) : (
-            <View style={st.wipe} accessibilityRole="alert">
+            <View style={common.dangerPanel} accessibilityRole="alert">
               <T w={800} size={15}>
-                ¿Borrar todos tus datos?
+                {t('settings.data.wipeTitle')}
               </T>
-              <T size={13} color={C.muted2} style={{ lineHeight: 19 }}>
-                Se eliminan movimientos, gastos e ingresos fijos, ahorro, metas e historial. Tus ajustes se conservan. Esta
-                acción no se puede deshacer; exporta antes si quieres una copia.
+              <T size={13} color={C.muted2} style={common.bodyText}>
+                {t('settings.data.wipeText')}
               </T>
               <T w={700} size={13}>
-                Escribe BORRAR para confirmar
+                {t('settings.data.wipeTypeToConfirm', { word: wipeWord })}
               </T>
-              <Field value={wipeText} onChangeText={(t) => setWipeText(t.slice(0, 12))} placeholder="BORRAR" autoCapitalize="characters" autoCorrect={false} />
+              <Field
+                value={wipeText}
+                onChangeText={(text) => setWipeText(text.slice(0, 12))}
+                placeholder={wipeWord}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
               <Row gap={8}>
-                <Tap
-                  onPress={() => {
-                    setWiping(false);
-                    setWipeText('');
-                  }}
-                  style={[st.confirmBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: C.line }]}>
+                <Tap onPress={closeWipe} style={[common.confirmBtn, common.confirmCancel]}>
                   <T w={800} size={14}>
-                    Cancelar
+                    {t('common.cancel')}
                   </T>
                 </Tap>
-                <Tap onPress={doWipe} style={[st.confirmBtn, { backgroundColor: C.danger, opacity: cantWipe ? 0.45 : 1 }]}>
-                  <T w={800} size={14} color="#FFFFFF">
-                    Borrar todo
+                <Tap onPress={doWipe} style={[common.confirmBtn, common.confirmDanger, cantWipe && common.disabled]}>
+                  <T w={800} size={14} color={C.white}>
+                    {t('settings.data.wipeConfirm')}
                   </T>
                 </Tap>
               </Row>
             </View>
           )}
-        </View>
-      </View>
+        </Stack>
+      </Stack>
     </Screen>
   );
 }
@@ -462,7 +477,7 @@ function RadioOption({ label, on, onPress }: { label: string; on: boolean; onPre
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ checked: on }}
-      style={[st.radio, { backgroundColor: on ? C.inSoft : C.card, borderColor: on ? C.in : C.line }]}>
+      style={[st.radio, on ? st.radioOn : st.radioOff]}>
       <RadioDot on={on} accent={C.in} />
       <T w={700} size={13.5} color={on ? C.inDark : C.ink}>
         {label}
@@ -470,29 +485,3 @@ function RadioOption({ label, on, onPress }: { label: string; on: boolean; onPre
     </Tap>
   );
 }
-
-const st = StyleSheet.create({
-  box: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 18 },
-  divider: { borderTopWidth: 1, borderTopColor: C.divider },
-  defRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  defIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  optGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  opt: { height: 40, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, justifyContent: 'center' },
-  units: { backgroundColor: C.segBg, borderRadius: 12, padding: 4 },
-  unit: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  radio: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1 },
-  hour: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  dataBtn: {
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  wipe: { backgroundColor: C.outSoft, borderRadius: 18, padding: 16, gap: 10 },
-  confirmBtn: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-});

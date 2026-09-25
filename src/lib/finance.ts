@@ -1,6 +1,8 @@
 import type { Fixed, FixedSegment, FixedStatus, Override } from '@/db/repo';
 import { statusKey } from '@/db/repo';
+import { t } from '@/i18n';
 
+import { joinMeta } from './format';
 import { occurrences, type HolidayRule, type HolidaySet, type Occurrence, type Preset, type Schedule } from './schedule';
 
 export type FixedItem = {
@@ -73,7 +75,8 @@ export function fixedItems(
       const paid = status?.status === 'paid';
       let name = f.name;
       if (occs.length > 1) {
-        name += preset === 'quincenal' && occs.length === 2 ? ` · ${i + 1}ª quincena` : ` · ${i + 1}º pago`;
+        const suffix = preset === 'quincenal' && occs.length === 2 ? 'finance.nthFortnight' : 'finance.nthPayment';
+        name = joinMeta(name, t(suffix, { n: i + 1 }));
       }
       const ov = overrides.get(key);
       const ovAmount = paid ? null : (ov?.amount ?? null);

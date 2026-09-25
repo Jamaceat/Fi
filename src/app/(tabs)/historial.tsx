@@ -1,16 +1,19 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import { IconArrowDown, IconArrowUp, IconCheck, IconPending, IconTrash } from '@/components/icons';
-import { Card, Header, Row, Screen, Sheet, T, Tap } from '@/components/ui';
+import { Card, Header, Row, Screen, Sheet, Stack, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { listMovements, loadFixedData, markPaid, skipOccurrence, unmark, type Fixed } from '@/db/repo';
-import { periodOf, periodRange, samePeriod, shiftPeriod, type Period } from '@/lib/dates';
+import { t } from '@/i18n';
+import { monthAbbr, monthName, periodOf, periodRange, samePeriod, shiftPeriod, type Period } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
-import { fmt, MONTHS, signed } from '@/lib/format';
+import { fmt, fmtFlow, joinMeta, signed } from '@/lib/format';
 import { useApp, useLoad } from '@/state/app';
+import { common, layout } from '@/styles/common';
+import { styles as st } from '@/styles/screens/historial.styles';
 
 const BAR_H = 150;
 
@@ -66,7 +69,7 @@ export default function Historial() {
     [currentPeriod.year, currentPeriod.month, settings.monthStart, settings.holiday],
   );
 
-  if (!data) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
+  if (!data) return <View style={layout.screen} />;
   const { months, resolved } = data;
 
   const max = Math.max(
@@ -77,6 +80,7 @@ export default function Historial() {
   const avg = Math.round(months.reduce((s, m) => s + m.inc + m.inExtra - m.out - m.outExtra, 0) / months.length / 1000) * 1000;
   const pendingItems = months.flatMap((m) => m.pending);
   const count = pendingItems.length;
+  const monthOf = (iso: string) => monthName(periodOf(iso, settings.monthStart).month);
 
   const act = async (fn: () => Promise<unknown>) => {
     await fn();
@@ -86,17 +90,17 @@ export default function Historial() {
   return (
     <Screen>
       <Header
-        kicker="Últimos 6 meses"
-        title="Meses"
+        kicker={t('history.kicker')}
+        title={t('history.title')}
         right={
           <Tap
             onPress={() => setSheetOpen(true)}
-            accessibilityLabel={count ? `Movimientos sin confirmar: ${count}` : 'Movimientos sin confirmar: ninguno'}
+            accessibilityLabel={count ? t('history.pendingLabel', { count }) : t('history.pendingNone')}
             style={st.pendBtn}>
             <IconPending size={20} />
             {count > 0 && (
               <View style={st.badge}>
-                <T w={800} size={11} color="#FFFFFF">
+                <T w={800} size={11} color={C.white}>
                   {count}
                 </T>
               </View>
@@ -105,39 +109,39 @@ export default function Historial() {
         }
       />
 
-      <Card style={{ padding: 18, gap: 14 }}>
-        <View style={{ gap: 2 }}>
+      <Card style={st.chartCard}>
+        <Stack gap={2}>
           <T w={600} size={13} color={C.muted}>
-            Ahorro promedio
+            {t('history.averageSavings')}
           </T>
           <T serif w={600} size={26} tabular numberOfLines={1} adjustsFontSizeToFit>
             {signed(avg)}
           </T>
-        </View>
-        <Row style={{ alignItems: 'flex-end' }}>
+        </Stack>
+        <Row style={st.bars}>
           {months.map((m, i) => (
-            <View key={i} style={{ flex: 1, alignItems: 'center', gap: 8 }}>
-              <Row gap={4} style={{ height: BAR_H, alignItems: 'flex-end' }}>
+            <View key={i} style={st.barColumn}>
+              <Row gap={4} style={[st.barPair, { height: BAR_H }]}>
                 <Bar base={scale(m.inc)} extra={scale(m.inExtra)} pend={scale(m.inPend)} color={C.in} />
                 <Bar base={scale(m.out)} extra={scale(m.outExtra)} pend={scale(m.outPend)} color={C.outBar} pendColor={C.out} />
               </Row>
               <T w={700} size={12} color={i === 5 ? C.ink : C.muted}>
-                {MONTHS[m.period.month].slice(0, 3)}
+                {monthAbbr(m.period.month)}
               </T>
             </View>
           ))}
         </Row>
         <View style={st.legend}>
-          <Legend color={C.in} label="Ingresos" />
-          <Legend color={C.outBar} label="Gastos" />
-          <Legend color={C.extra} label="Extraordinario" />
-          <Legend dashed label="Sin confirmar" />
+          <Legend color={C.in} label={t('common.incomes')} />
+          <Legend color={C.outBar} label={t('common.expenses')} />
+          <Legend color={C.extra} label={t('common.extraordinary')} />
+          <Legend dashed label={t('history.unconfirmed')} />
         </View>
       </Card>
 
-      <View style={{ gap: 10 }}>
+      <Stack gap={10}>
         <T w={800} size={16}>
-          Detalle por mes
+          {t('history.detail')}
         </T>
         {[...months].reverse().map((m) => {
           const inc = m.inc + m.inExtra;
@@ -152,52 +156,52 @@ export default function Historial() {
                 setPeriod(m.period);
                 router.navigate('/');
               }}>
-              <Row style={{ justifyContent: 'space-between' }}>
+              <Row style={layout.between}>
                 <Row gap={8}>
                   <T w={800} size={15.5}>
-                    {MONTHS[m.period.month]}
+                    {monthName(m.period.month)}
                   </T>
                   {current && (
-                    <T w={800} size={11} color="#FFFFFF" style={st.current}>
-                      Actual
+                    <T w={800} size={11} color={C.white} style={st.current}>
+                      {t('history.current')}
                     </T>
                   )}
                 </Row>
                 <T w={700} size={13} color={C.muted}>
-                  Ahorro{' '}
+                  {t('history.savings')}{' '}
                   <T w={700} size={13} tabular>
                     {signed(inc - out)}
                   </T>
                 </T>
               </Row>
               <Row gap={8}>
-                <View style={{ flex: 1, gap: 2 }}>
+                <Stack gap={2} style={layout.fill}>
                   <T w={600} size={13} color={C.muted}>
-                    Ingresos
+                    {t('common.incomes')}
                   </T>
                   <T w={800} size={13} color={C.in} tabular>
                     {fmt(inc)}
                   </T>
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
+                </Stack>
+                <Stack gap={2} style={layout.fill}>
                   <T w={600} size={13} color={C.muted}>
-                    Gastos
+                    {t('common.expenses')}
                   </T>
                   <T w={800} size={13} color={C.out} tabular>
                     {fmt(out)}
                   </T>
-                </View>
+                </Stack>
               </Row>
               {(extra > 0 || m.pending.length > 0) && (
-                <Row gap={6} style={{ flexWrap: 'wrap' }}>
+                <Row gap={6} style={layout.wrap}>
                   {extra > 0 && (
                     <T w={800} size={11.5} color={C.extraDark} style={st.extraTag}>
-                      Incluye {fmt(extra)} extraordinario
+                      {t('history.includesExtra', { amount: fmt(extra) })}
                     </T>
                   )}
                   {m.pending.length > 0 && (
                     <T w={800} size={11.5} color={C.muted2} style={st.pendTag}>
-                      {m.pending.length} sin confirmar
+                      {t('history.unconfirmedCount', { count: m.pending.length })}
                     </T>
                   )}
                 </Row>
@@ -205,64 +209,65 @@ export default function Historial() {
             </Tap>
           );
         })}
-      </View>
+      </Stack>
 
-      <Sheet visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Sin confirmar">
-        <T size={13} color={C.muted2} style={{ lineHeight: 19 }}>
-          Fijos de meses anteriores que nunca se marcaron. Bórralos o confírmalos en un periodo extraordinario: se suman al
-          mes al que pertenecen. Los que dejes aquí siguen esperando.
+      <Sheet visible={sheetOpen} onClose={() => setSheetOpen(false)} title={t('history.unconfirmed')}>
+        <T size={13} color={C.muted2} style={common.bodyText}>
+          {t('history.sheet.text')}
         </T>
 
         {count === 0 && (
-          <Card style={{ paddingVertical: 22, paddingHorizontal: 16, alignItems: 'center', gap: 6 }}>
+          <Card style={st.allDone}>
             <IconCheck size={26} color={C.in} stroke={2} />
             <T w={800} size={15}>
-              Todo al día
+              {t('history.sheet.allDone')}
             </T>
             <T size={13} color={C.muted2}>
-              No quedan movimientos por decidir.
+              {t('history.sheet.allDoneText')}
             </T>
           </Card>
         )}
 
         {pendingItems.map((p) => {
           const income = p.fixed.type === 'ingreso';
-          const monthName = MONTHS[periodOf(p.occ.due, settings.monthStart).month].toLowerCase();
           return (
             <View key={`${p.fixed.id}-${p.occ.due}`} style={st.pendCard}>
               <Row gap={12}>
-                <View style={[st.pendIcon, { backgroundColor: income ? '#E3EDF5' : '#FBEBDF' }]}>
+                <View style={[st.pendIcon, income ? st.pendIconIn : st.pendIconOut]}>
                   {income ? <IconArrowUp color={C.in} /> : <IconArrowDown color={C.danger} />}
                 </View>
-                <View style={{ flex: 1, gap: 2 }}>
+                <Stack gap={2} style={layout.fill}>
                   <T w={800} size={15} numberOfLines={1}>
                     {p.name}
                   </T>
                   <T w={600} size={12.5} color={C.muted}>
-                    {income ? 'Ingreso' : 'Gasto'} · periodo de {monthName}
+                    {joinMeta(
+                      income ? t('common.income') : t('common.expense'),
+                      t('history.sheet.periodOf', { month: monthOf(p.occ.due).toLowerCase() }),
+                    )}
                   </T>
-                </View>
+                </Stack>
                 <T w={800} size={15} tabular color={income ? C.in : C.out}>
-                  {(income ? '+ ' : '− ') + fmt(p.amount)}
+                  {fmtFlow(p.amount, income)}
                 </T>
               </Row>
               <Row gap={8}>
                 <Tap
-                  style={[st.pendAction, { borderWidth: 1.5, borderColor: C.line, backgroundColor: C.card }]}
-                  accessibilityLabel={`Borrar ${p.name}`}
+                  style={[st.pendAction, st.pendDelete]}
+                  accessibilityLabel={t('history.sheet.deleteLabel', { name: p.name })}
                   onPress={() => act(() => skipOccurrence(db, p.fixed.id, p.occ.due))}>
                   <IconTrash size={16} color={C.danger} stroke={2} />
                   <T w={800} size={14} color={C.danger}>
-                    Borrar
+                    {t('history.sheet.delete')}
                   </T>
                 </Tap>
                 <Tap
-                  style={[st.pendAction, { backgroundColor: C.extra }]}
-                  accessibilityLabel={`Confirmar ${p.name} en periodo extraordinario`}
+                  style={[st.pendAction, st.pendConfirm]}
+                  accessibilityLabel={t('history.sheet.confirmLabel', { name: p.name })}
                   onPress={() => act(() => markPaid(db, p.fixed, p.occ.due, { extra: true, amount: p.amount, date: p.occ.date }))}>
-                  <IconCheck size={16} color="#FFFFFF" stroke={2.4} />
-                  <T w={800} size={14} color="#FFFFFF">
-                    Confirmar
+                  <IconCheck size={16} color={C.white} stroke={2.4} />
+                  <T w={800} size={14} color={C.white}>
+                    {t('history.sheet.confirm')}
                   </T>
                 </Tap>
               </Row>
@@ -271,38 +276,38 @@ export default function Historial() {
         })}
 
         {resolved.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <Stack gap={8}>
             <T w={800} size={13} color={C.muted2}>
-              Resueltos
+              {t('history.sheet.resolved')}
             </T>
             {resolved.map((r) => {
               const confirmed = r.status === 'paid';
               return (
-                <Row key={`${r.fixed_id}-${r.due_date}`} gap={10} style={{ minHeight: 44 }}>
+                <Row key={`${r.fixed_id}-${r.due_date}`} gap={10} style={st.resolvedRow}>
                   <T
                     w={700}
                     size={13}
                     color={confirmed ? C.ink : C.muted}
                     numberOfLines={1}
-                    style={{ flex: 1, textDecorationLine: confirmed ? 'none' : 'line-through' }}>
-                    {r.fixed.name} · {MONTHS[periodOf(r.due_date, settings.monthStart).month]}
+                    style={[st.resolvedName, !confirmed && st.resolvedSkipped]}>
+                    {joinMeta(r.fixed.name, monthOf(r.due_date))}
                   </T>
                   <T
                     w={800}
                     size={11.5}
                     color={confirmed ? C.extraDark : C.muted2}
-                    style={[st.tag, { backgroundColor: confirmed ? C.extraSoft : '#E9E5DE' }]}>
-                    {confirmed ? 'Extraordinario' : 'Borrado'}
+                    style={[st.tag, confirmed ? st.tagExtra : st.tagSkipped]}>
+                    {confirmed ? t('common.extraordinary') : t('history.sheet.deleted')}
                   </T>
-                  <Tap onPress={() => act(() => unmark(db, r.fixed_id, r.due_date))} style={{ padding: 10 }}>
+                  <Tap onPress={() => act(() => unmark(db, r.fixed_id, r.due_date))} style={st.undo}>
                     <T w={800} size={13} color={C.in}>
-                      Deshacer
+                      {t('history.sheet.undo')}
                     </T>
                   </Tap>
                 </Row>
               );
             })}
-          </View>
+          </Stack>
         )}
       </Sheet>
     </Screen>
@@ -312,103 +317,21 @@ export default function Historial() {
 function Bar({ base, extra, pend, color, pendColor }: { base: number; extra: number; pend: number; color: string; pendColor?: string }) {
   const hasTop = extra > 0 || pend > 0;
   return (
-    <View style={{ width: 12, gap: 2 }}>
+    <View style={st.bar}>
       {pend > 0 && <View style={[st.pendBar, { height: pend, borderColor: pendColor ?? color }]} />}
-      {extra > 0 && <View style={[st.topBar, { height: extra, backgroundColor: C.extra }]} />}
-      {base > 0 && (
-        <View
-          style={[
-            { height: base, backgroundColor: color, borderRadius: 3 },
-            !hasTop && { borderTopLeftRadius: 6, borderTopRightRadius: 6 },
-          ]}
-        />
-      )}
+      {extra > 0 && <View style={[st.topBar, { height: extra }]} />}
+      {base > 0 && <View style={[st.baseBar, { height: base, backgroundColor: color }, !hasTop && st.baseBarTop]} />}
     </View>
   );
 }
 
 function Legend({ color, label, dashed }: { color?: string; label: string; dashed?: boolean }) {
   return (
-    <Row gap={6} style={{ width: '48%' }}>
-      <View
-        style={[
-          { width: 10, height: 10, borderRadius: 3 },
-          dashed ? { borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.muted } : { backgroundColor: color },
-        ]}
-      />
+    <Row gap={6} style={st.legendItem}>
+      <View style={[st.swatch, dashed ? st.swatchDashed : { backgroundColor: color }]} />
       <T w={700} size={12} color={C.muted2}>
         {label}
       </T>
     </Row>
   );
 }
-
-const st = StyleSheet.create({
-  pendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 5,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: C.bg,
-    backgroundColor: C.out,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  legend: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 8,
-    columnGap: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#EFEBE4',
-  },
-  pendBar: { borderWidth: 1.5, borderStyle: 'dashed', borderTopLeftRadius: 6, borderTopRightRadius: 6, borderRadius: 3 },
-  topBar: { borderTopLeftRadius: 6, borderTopRightRadius: 6, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
-  monthCard: {
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  current: { backgroundColor: C.ink, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden' },
-  extraTag: { backgroundColor: C.extraSoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' },
-  pendTag: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.faint, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  pendCard: {
-    backgroundColor: C.card,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: '#C9C2B6',
-    borderRadius: 18,
-    padding: 14,
-    gap: 12,
-  },
-  pendIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  pendAction: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  tag: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' },
-});

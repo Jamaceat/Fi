@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { listFixed, listGoals, listSavings, type Movement } from '@/db/repo';
+import { t } from '@/i18n';
 
 import { describeSchedule } from './schedule';
 
@@ -22,42 +23,78 @@ export async function exportCsv(db: SQLiteDatabase) {
   ]);
   const fixedName = new Map(fixed.map((f) => [f.id, f.name]));
 
-  const rows: string[] = [line(['registro', 'fecha', 'tipo', 'nombre', 'categoria', 'monto', 'detalle', 'nota'])];
+  const rows: string[] = [
+    line([
+      t('export.columns.record'),
+      t('export.columns.date'),
+      t('export.columns.type'),
+      t('export.columns.name'),
+      t('export.columns.category'),
+      t('export.columns.amount'),
+      t('export.columns.detail'),
+      t('export.columns.note'),
+    ]),
+  ];
   for (const m of movs) {
-    const detail = m.fixed_id != null ? `Fijo: ${fixedName.get(m.fixed_id) ?? ''}` : 'Ocasional';
+    const detail =
+      m.fixed_id != null ? t('export.fixedDetail', { name: fixedName.get(m.fixed_id) ?? '' }) : t('export.occasional');
     rows.push(
-      line(['movimiento', m.date, m.type, m.name, m.category, m.amount, detail + (m.extraordinary ? ' (extraordinario)' : ''), m.note]),
+      line([
+        t('export.records.movement'),
+        m.date,
+        m.type,
+        m.name,
+        m.category,
+        m.amount,
+        detail + (m.extraordinary ? t('export.extraordinarySuffix') : ''),
+        m.note,
+      ]),
     );
   }
   for (const f of fixed) {
     rows.push(
       line([
-        'fijo',
+        t('export.records.fixed'),
         f.start_date,
         f.type,
         f.name,
         f.category,
         f.amount,
-        describeSchedule(f) + (f.active ? '' : ` (eliminado ${f.end_date})`),
-        f.variable ? 'monto variable' : '',
+        describeSchedule(f) + (f.active ? '' : t('export.deletedSuffix', { date: f.end_date ?? '' })),
+        f.variable ? t('export.variableAmount') : '',
       ]),
     );
   }
   for (const e of [...savings].reverse()) {
-    rows.push(line(['ahorro', e.date, e.kind === 'add' ? 'aporte' : 'actualizacion', '', '', e.delta, `saldo ${e.after}`, '']));
+    rows.push(
+      line([
+        t('export.records.savings'),
+        e.date,
+        e.kind === 'add' ? t('export.savingsAdd') : t('export.savingsUpdate'),
+        '',
+        '',
+        e.delta,
+        t('export.balance', { amount: e.after }),
+        '',
+      ]),
+    );
   }
   for (const g of goals) {
-    rows.push(line(['meta', g.last_date ?? '', '', g.name, '', g.saved, `objetivo ${g.target}`, '']));
+    rows.push(line([t('export.records.goal'), g.last_date ?? '', '', g.name, '', g.saved, t('export.target', { amount: g.target }), '']));
   }
 
-  const name = `movimientos-${new Date().getFullYear()}.csv`;
+  const name = t('export.fileName', { year: new Date().getFullYear() });
   const file = new File(Paths.cache, name);
   file.create({ overwrite: true });
   // BOM para que Excel abra bien las tildes.
   file.write('﻿' + rows.join('\n'));
 
   if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar datos', UTI: 'public.comma-separated-values-text' });
+    await Sharing.shareAsync(file.uri, {
+      mimeType: 'text/csv',
+      dialogTitle: t('export.dialogTitle'),
+      UTI: 'public.comma-separated-values-text',
+    });
   }
   return name;
 }

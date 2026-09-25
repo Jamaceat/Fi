@@ -1,0 +1,48 @@
+import { StyleSheet } from 'react-native';
+
+import { C, F } from '@/constants/theme';
+
+export const styles = StyleSheet.create({
+  hero: { borderRadius: 24, padding: 20, gap: 16 },
+  heroOut: { backgroundColor: C.hero },
+  heroIn: { backgroundColor: C.inDark },
+  heroTile: { flex: 1, borderRadius: 16, padding: 12, gap: 4 },
+  heroTileOut: { backgroundColor: C.heroTile },
+  heroTileIn: { backgroundColor: C.in },
+  pill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' },
+  catChip: { height: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, justifyContent: 'center' },
+  catList: { gap: 8 },
+  amountRow: {
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.card,
+    paddingHorizontal: 14,
+  },
+  amountInput: { flex: 1, fontFamily: F.serif500, fontSize: 24, color: C.ink, padding: 0 },
+  presetRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, minHeight: 56 },
+  defTag: { backgroundColor: C.chip, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden' },
+  customBox: { padding: 14, gap: 12 },
+  customBoxOff: { backgroundColor: C.panelOff },
+  customHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  units: { backgroundColor: C.segBg, borderRadius: 12, padding: 4 },
+  unit: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  unitOn: { backgroundColor: C.card },
+  wd: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  stepRow: { paddingVertical: 10, gap: 12 },
+  upcoming: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 4 },
+  upcomingOut: { backgroundColor: C.outPanel },
+  upcomingIn: { backgroundColor: C.inSoft },
+  upcomingRow: { paddingVertical: 10 },
+  upcomingDividerOut: { borderTopWidth: 1, borderTopColor: C.outPanelLine },
+  upcomingDividerIn: { borderTopWidth: 1, borderTopColor: C.inTrack2 },
+  dateBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: C.glassStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
