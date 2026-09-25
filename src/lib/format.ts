@@ -22,3 +22,33 @@ export const cleanAmount = (text: string) =>
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export const initial = (name: string) => name.trim().charAt(0).toUpperCase() || '·';
+
+/**
+ * Monto compacto para titulares: por debajo del millón se muestra completo;
+ * desde el millón se expresa en millones truncando (nunca redondea hacia arriba).
+ * 5000 → "5.000" · 1250000 → "1,25 M" · 48900000 → "48,9 M" · 1250000000 → "1.250 M"
+ */
+export const compactAmount = (n: number) => {
+  if (n < 1e6) return dots(n);
+  const m = n / 1e6;
+  const d = m < 10 ? 2 : m < 100 ? 1 : 0;
+  const p = 10 ** d;
+  const [int, dec = ''] = String(Math.floor(m * p) / p).split('.');
+  return dots(int) + (dec ? ',' + dec : '') + ' M';
+};
+
+/** Desglose por unidades, de mayor a menor y sin grupos en cero: 1250000 → 1 millón · 250 mil */
+export const amountParts = (n: number) =>
+  (
+    [
+      [1e9, 'mil millones', 'mil millones'],
+      [1e6, 'millón', 'millones'],
+      [1e3, 'mil', 'mil'],
+      [1, 'peso', 'pesos'],
+    ] as const
+  )
+    .map(([unit, one, many]) => {
+      const value = Math.floor(n / unit) % 1000;
+      return { unit, value, label: value === 1 ? one : many };
+    })
+    .filter((p) => p.value > 0);

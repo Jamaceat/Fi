@@ -326,36 +326,7 @@ export function Field(props: TextInputProps) {
   return <TextInput placeholderTextColor="#8A847A" {...props} style={[s.field, props.style]} />;
 }
 
-export function AmountField({
-  value,
-  onChangeText,
-  color = C.ink,
-  size = 52,
-  autoFocus,
-}: {
-  value: string;
-  onChangeText: (t: string) => void;
-  color?: string;
-  size?: number;
-  autoFocus?: boolean;
-}) {
-  return (
-    <Row gap={6} style={{ justifyContent: 'center', alignItems: 'baseline' }}>
-      <T serif size={size * 0.65} color={color}>
-        $
-      </T>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType="number-pad"
-        placeholder="0"
-        placeholderTextColor={color + '88'}
-        autoFocus={autoFocus}
-        style={{ fontFamily: F.serif500, fontSize: size, color, minWidth: 60, maxWidth: 260, padding: 0, letterSpacing: -1 }}
-      />
-    </Row>
-  );
-}
+export { AmountField } from './amount-field';
 
 // ——— Avisos ———
 
