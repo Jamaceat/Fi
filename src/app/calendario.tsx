@@ -477,7 +477,7 @@ function DayDetail({
               meta={`${m.category}${m.extraordinary ? ' · extraordinario' : ''}`}
               amount={(m.type === 'gasto' ? '− ' : '+ ') + fmt(m.amount)}
               income={m.type === 'ingreso'}
-              badge={m.fixed_id != null ? 'Fijo' : 'Ocasional'}
+              badge={m.fixed_id != null ? 'Fijo' : m.paid ? 'Ocasional' : m.type === 'gasto' ? 'Pendiente' : 'Por recibir'}
               onPress={() => router.push({ pathname: '/nuevo', params: { id: String(m.id) } })}
             />
           ))}

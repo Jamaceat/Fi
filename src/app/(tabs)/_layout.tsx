@@ -39,7 +39,7 @@ function BottomNav({ state, navigation }: TabBarProps) {
             onPress={() => navigation.navigate(name)}
             style={st.item}>
             <Icon size={22} color={on ? C.ink : C.muted} stroke={1.9} />
-            <T w={on ? 800 : 700} size={10.5} color={on ? C.ink : C.muted}>
+            <T w={on ? 800 : 700} size={10.5} color={on ? C.ink : C.muted} numberOfLines={1}>
               {label}
             </T>
           </Tap>
@@ -73,7 +73,7 @@ const st = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.line,
   },
-  item: { width: 66, height: 52, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  item: { flex: 1, minWidth: 0, height: 52, alignItems: 'center', justifyContent: 'center', gap: 4 },
   fab: {
     width: 54,
     height: 54,

@@ -77,8 +77,11 @@ export function marksOf(day: DayData | undefined, filter: CalFilter): DayMarks {
   const showOut = filter !== 'ingreso';
   const showIn = filter !== 'gasto';
   for (const x of day.movs) {
-    if (x.type === 'gasto') m.out ||= showOut;
-    else m.in ||= showIn;
+    if (x.type === 'gasto') {
+      if (x.paid) m.out ||= showOut;
+      else m.outPending ||= showOut;
+    } else if (x.paid) m.in ||= showIn;
+    else m.inPending ||= showIn;
   }
   for (const it of day.fixed) {
     if (it.fixed.type === 'gasto') {

@@ -39,7 +39,7 @@ export default function Historial() {
 
       const months: MonthAgg[] = periods.map((p, i) => {
         const { from, to } = periodRange(p, settings.monthStart);
-        const ms = movs.filter((m) => m.date >= from && m.date < to);
+        const ms = movs.filter((m) => m.date >= from && m.date < to && m.paid);
         const pick = (type: string, extra: number) => sum(ms.filter((m) => m.type === type && m.extraordinary === extra));
         // Los fijos sin confirmar solo cuentan en meses ya cerrados.
         const pending = i < 5 ? fixedItems(fixedData, from, to, settings.holiday, holidays).filter((x) => !x.paid) : [];
@@ -110,7 +110,7 @@ export default function Historial() {
           <T w={600} size={13} color={C.muted}>
             Ahorro promedio
           </T>
-          <T serif w={600} size={26} tabular>
+          <T serif w={600} size={26} tabular numberOfLines={1} adjustsFontSizeToFit>
             {signed(avg)}
           </T>
         </View>

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
@@ -6,7 +7,7 @@ import Animated, { ZoomIn } from 'react-native-reanimated';
 import { IconCalendar, IconWrench } from '@/components/icons';
 import { Card, Chip, EmptyBox, MovementRow, Row, Screen, Segmented, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, type Movement } from '@/db/repo';
+import { listMovements, setMovementPaid, type Movement } from '@/db/repo';
 import { periodName, shortDate } from '@/lib/dates';
 import { sum } from '@/lib/finance';
 import { fmt, plural } from '@/lib/format';
@@ -16,7 +17,8 @@ import { useApp, useLoad } from '@/state/app';
 type Filter = 'todos' | 'fijo' | 'ocasional';
 
 export default function Movimientos() {
-  const { period, range } = useApp();
+  const db = useSQLiteContext();
+  const { period, range, bump } = useApp();
   const [tab, setTab] = useState<Kind>('gasto');
   const [filter, setFilter] = useState<Filter>('todos');
   // Movimiento fijo tocado: abre el selector calendario / editar.
@@ -71,7 +73,7 @@ export default function Movimientos() {
           <T w={600} size={13} color={C.muted}>
             {summaryTitle}
           </T>
-          <T serif w={600} size={26} color={accent} tabular>
+          <T serif w={600} size={26} color={accent} tabular numberOfLines={1} adjustsFontSizeToFit>
             {fmt(sum(list))}
           </T>
         </View>
@@ -92,7 +94,12 @@ export default function Movimientos() {
               meta={`${m.category} · ${shortDate(m.date)}${m.extraordinary ? ' · extraordinario' : ''}`}
               amount={(g ? '− ' : '+ ') + fmt(m.amount)}
               income={!g}
-              badge={m.fixed_id != null ? 'Fijo' : 'Ocasional'}
+              badge={m.fixed_id != null ? 'Fijo' : m.paid ? 'Ocasional' : g ? 'Pendiente' : 'Por recibir'}
+              check={
+                m.fixed_id == null
+                  ? { on: !!m.paid, onToggle: () => setMovementPaid(db, m.id, !m.paid).then(bump) }
+                  : undefined
+              }
               onPress={() => (m.fixed_id != null ? setPicked(m) : editMovement(m))}
             />
           ))}

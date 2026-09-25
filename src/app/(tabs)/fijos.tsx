@@ -222,7 +222,7 @@ export default function Fijos() {
                 {gastosAll.filter((i) => i.paid).length} de {gastosAll.length} pagos
               </T>
             </Row>
-            <T serif size={36} color={C.bg} tabular style={{ letterSpacing: -0.5 }}>
+            <T serif size={36} color={C.bg} tabular numberOfLines={1} adjustsFontSizeToFit style={{ letterSpacing: -0.5 }}>
               {fmt(paidSum)}
             </T>
             <Progress pct={total ? (paidSum / total) * 100 : 0} color={C.outBar} track={C.heroTrack} />
@@ -274,7 +274,7 @@ export default function Fijos() {
                 de {fmt(incTotal)}
               </T>
             </Row>
-            <T serif w={600} size={28} color={C.inDark} tabular>
+            <T serif w={600} size={28} color={C.inDark} tabular numberOfLines={1} adjustsFontSizeToFit>
               {fmt(incPaid)}
             </T>
             <Progress pct={incTotal ? (incPaid / incTotal) * 100 : 0} color={C.in} track={C.inTrack2} />

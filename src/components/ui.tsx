@@ -483,6 +483,7 @@ export function MovementRow({
   badge,
   first,
   onPress,
+  check,
 }: {
   name: string;
   meta: string;
@@ -491,14 +492,27 @@ export function MovementRow({
   badge?: string;
   first?: boolean;
   onPress?: () => void;
+  /** Ocasional: casilla pagado/pendiente en lugar de la inicial. */
+  check?: { on: boolean; onToggle: () => void };
 }) {
   return (
     <Tap onPress={onPress} style={[s.movRow, !first && s.divider]}>
-      <View style={[s.avatar, { backgroundColor: income ? C.inSoft : C.outSoft }]}>
-        <T w={800} size={15} color={income ? C.inDark : C.outDark}>
-          {initial(name)}
-        </T>
-      </View>
+      {check ? (
+        <Tap
+          onPress={check.onToggle}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: check.on }}
+          accessibilityLabel={`${check.on ? 'Desmarcar' : 'Marcar'} ${name} como ${income ? 'recibido' : 'pagado'}`}
+          style={[s.check, { borderColor: check.on ? C.ink : C.ring, backgroundColor: check.on ? C.ink : C.card }]}>
+          {check.on && <IconCheck size={18} color="#FFFFFF" />}
+        </Tap>
+      ) : (
+        <View style={[s.avatar, { backgroundColor: income ? C.inSoft : C.outSoft }]}>
+          <T w={800} size={15} color={income ? C.inDark : C.outDark}>
+            {initial(name)}
+          </T>
+        </View>
+      )}
       <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
         <T w={700} size={15} numberOfLines={1}>
           {name}
@@ -641,5 +655,6 @@ export const s = StyleSheet.create({
   handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#D3CDC2', marginBottom: 10 },
   movRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   avatar: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  check: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   badge: { backgroundColor: C.chip, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, overflow: 'hidden' },
 });

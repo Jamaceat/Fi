@@ -32,8 +32,9 @@ export default function Inicio() {
   if (!data) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
   const { movs, items, savings } = data;
 
-  const gastos = movs.filter((m) => m.type === 'gasto');
-  const ingresos = movs.filter((m) => m.type === 'ingreso');
+  // Los ocasionales pendientes aún no mueven dinero.
+  const gastos = movs.filter((m) => m.type === 'gasto' && m.paid);
+  const ingresos = movs.filter((m) => m.type === 'ingreso' && m.paid);
   const out = sum(gastos);
   const inc = sum(ingresos);
   const spentPct = inc > 0 ? Math.round((out / inc) * 100) : out > 0 ? 100 : 0;
@@ -67,7 +68,7 @@ export default function Inicio() {
           <T w={600} size={13} color={C.heroSub}>
             Disponible este mes
           </T>
-          <T serif size={42} color={C.bg} tabular style={{ letterSpacing: -1 }}>
+          <T serif size={42} color={C.bg} tabular numberOfLines={1} adjustsFontSizeToFit style={{ letterSpacing: -1 }}>
             {hide ? '$ ••••' : (inc - out < 0 ? '− ' : '') + fmt(inc - out)}
           </T>
         </View>
@@ -110,7 +111,7 @@ export default function Inicio() {
           <T w={700} size={12.5} color={C.inSub}>
             Ahorro total
           </T>
-          <T serif size={24} color="#F4F8FB" tabular>
+          <T serif size={24} color="#F4F8FB" tabular numberOfLines={1} adjustsFontSizeToFit>
             {money(balance)}
           </T>
           <T w={700} size={12.5} color={C.inSub}>
@@ -210,7 +211,7 @@ export default function Inicio() {
                 key={m.id}
                 first={i === 0}
                 name={m.name}
-                meta={`${m.fixed_id != null ? 'Fijo' : 'Ocasional'} · ${shortDate(m.date)}`}
+                meta={`${m.fixed_id != null ? 'Fijo' : m.paid ? 'Ocasional' : 'Pendiente'} · ${shortDate(m.date)}`}
                 amount={hide ? '$ ••••' : (m.type === 'gasto' ? '− ' : '+ ') + fmt(m.amount)}
                 income={m.type === 'ingreso'}
                 onPress={() => router.push({ pathname: '/nuevo', params: { id: String(m.id) } })}

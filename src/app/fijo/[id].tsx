@@ -246,7 +246,7 @@ export default function EditarFijo() {
               <T w={700} size={13} color={isGasto ? C.heroSub : C.inSub} numberOfLines={1}>
                 {d.name.trim() || 'Sin nombre'}
               </T>
-              <T serif size={32} color="#FFFFFF" tabular>
+              <T serif size={32} color="#FFFFFF" tabular numberOfLines={1} adjustsFontSizeToFit>
                 {(d.variable ? '≈ ' : '') + fmt(amount)}
               </T>
               <T size={12.5} color={isGasto ? C.heroSub : C.inSub}>

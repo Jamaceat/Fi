@@ -146,7 +146,7 @@ export default function Ahorro() {
             <T w={700} size={13} color={C.inSub}>
               Total ahorrado
             </T>
-            <T serif size={40} color="#F4F8FB" tabular style={{ letterSpacing: -1 }}>
+            <T serif size={40} color="#F4F8FB" tabular numberOfLines={1} adjustsFontSizeToFit style={{ letterSpacing: -1 }}>
               {fmt(balance)}
             </T>
           </View>

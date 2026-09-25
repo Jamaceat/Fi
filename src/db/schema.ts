@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'finanzas.db';
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 6;
 
 /** Se ejecuta en SQLiteProvider.onInit antes de renderizar la app. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -164,6 +164,14 @@ CREATE INDEX IF NOT EXISTS idx_fixed_segments_fixed ON fixed_segments(fixed_id);
 ALTER TABLE fixed ADD COLUMN anticipated INTEGER NOT NULL DEFAULT 1;
 `);
     version = 5;
+  }
+
+  if (version === 5) {
+    await db.execAsync(`
+-- Ocasional pagado/recibido (1) o pendiente (0). Los ya registrados cuentan como pagados.
+ALTER TABLE movements ADD COLUMN paid INTEGER NOT NULL DEFAULT 1;
+`);
+    version = 6;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

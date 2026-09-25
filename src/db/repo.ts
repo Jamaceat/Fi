@@ -16,6 +16,8 @@ export type Movement = {
   fixed_id: number | null;
   fixed_due: string | null;
   extraordinary: number;
+  /** 1 = pagado/recibido; 0 = ocasional pendiente (no cuenta en los totales). */
+  paid: number;
 };
 
 export type Fixed = Schedule & {
@@ -147,15 +149,15 @@ export const listMovements = (db: SQLiteDatabase, from: string, to: string) =>
 export const getMovement = (db: SQLiteDatabase, id: number) =>
   db.getFirstAsync<Movement>('SELECT * FROM movements WHERE id = ?', id);
 
-type MovementInput = Omit<Movement, 'id' | 'fixed_id' | 'fixed_due' | 'extraordinary'> &
-  Partial<Pick<Movement, 'fixed_id' | 'fixed_due' | 'extraordinary'>>;
+type MovementInput = Omit<Movement, 'id' | 'fixed_id' | 'fixed_due' | 'extraordinary' | 'paid'> &
+  Partial<Pick<Movement, 'fixed_id' | 'fixed_due' | 'extraordinary' | 'paid'>>;
 
 export async function insertMovement(db: SQLiteDatabase, m: MovementInput) {
   const r = await db.runAsync(
-    `INSERT INTO movements (type, name, category, amount, date, note, fixed_id, fixed_due, extraordinary)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO movements (type, name, category, amount, date, note, fixed_id, fixed_due, extraordinary, paid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     m.type, m.name, m.category, m.amount, m.date, m.note,
-    m.fixed_id ?? null, m.fixed_due ?? null, m.extraordinary ?? 0,
+    m.fixed_id ?? null, m.fixed_due ?? null, m.extraordinary ?? 0, m.paid ?? 1,
   );
   return r.lastInsertRowId;
 }
@@ -163,17 +165,21 @@ export async function insertMovement(db: SQLiteDatabase, m: MovementInput) {
 export async function updateMovement(
   db: SQLiteDatabase,
   id: number,
-  m: Pick<Movement, 'type' | 'name' | 'category' | 'amount' | 'date' | 'note'>,
+  m: Pick<Movement, 'type' | 'name' | 'category' | 'amount' | 'date' | 'note' | 'paid'>,
 ) {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE movements SET type = ?, name = ?, category = ?, amount = ?, date = ?, note = ? WHERE id = ?',
-      m.type, m.name, m.category, m.amount, m.date, m.note, id,
+      'UPDATE movements SET type = ?, name = ?, category = ?, amount = ?, date = ?, note = ?, paid = ? WHERE id = ?',
+      m.type, m.name, m.category, m.amount, m.date, m.note, m.paid, id,
     );
     // Mantiene el monto real del pago de un fijo sincronizado.
     await db.runAsync('UPDATE fixed_status SET amount = ? WHERE movement_id = ?', m.amount, id);
   });
 }
+
+/** Marca o desmarca un ocasional como pagado/recibido. */
+export const setMovementPaid = (db: SQLiteDatabase, id: number, paid: boolean) =>
+  db.runAsync('UPDATE movements SET paid = ? WHERE id = ?', paid ? 1 : 0, id);
 
 export async function deleteMovement(db: SQLiteDatabase, id: number) {
   await db.withTransactionAsync(async () => {

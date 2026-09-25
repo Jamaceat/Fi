@@ -8,19 +8,10 @@ import { DatePicker } from '@/components/calendar';
 import { IconCalendar, IconClose, IconTrash } from '@/components/icons';
 import { AmountField, Field, PrimaryButton, RoundButton, Row, Screen, Segmented, Sheet, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
-import {
-  deleteMovement,
-  getFixed,
-  getMovement,
-  insertFixed,
-  insertMovement,
-  markPaid,
-  updateMovement,
-  type Movement,
-} from '@/db/repo';
+import { deleteMovement, getMovement, insertFixed, insertMovement, updateMovement, type Movement } from '@/db/repo';
 import { fromISO, longDate, periodOf, periodRange, todayISO } from '@/lib/dates';
 import { cleanAmount, dots } from '@/lib/format';
-import { occurrences, type Kind } from '@/lib/schedule';
+import type { Kind } from '@/lib/schedule';
 import { useApp } from '@/state/app';
 
 const CATS: Record<Kind, string[]> = {
@@ -43,6 +34,8 @@ export default function Nuevo() {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(initialDate);
   const [note, setNote] = useState('');
+  // Ocasional: ya pagado/recibido o pendiente.
+  const [paid, setPaid] = useState(true);
   const [day, setDay] = useState(fromISO(initialDate).getDate());
   const [dayOpen, setDayOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
@@ -59,6 +52,7 @@ export default function Nuevo() {
       setDate(m.date);
       setNote(m.note);
       setFreq(m.fixed_id != null ? 'fijo' : 'ocasional');
+      setPaid(!!m.paid);
     });
   }, [db, id]);
 
@@ -92,13 +86,15 @@ export default function Nuevo() {
           amount: n,
           date,
           note: note.trim(),
+          paid: linked || paid ? 1 : 0,
         });
       } else if (freq === 'ocasional') {
-        await insertMovement(db, { type: tipo, name, category: cat, amount: n, date, note: note.trim() });
+        await insertMovement(db, { type: tipo, name, category: cat, amount: n, date, note: note.trim(), paid: paid ? 1 : 0 });
       } else {
-        // Fijo: crea la regla mensual y registra este primer pago/ingreso.
+        // Fijo: solo crea la regla mensual. Anticipado no es pagado: la primera ocurrencia
+        // queda pendiente en Fijos hasta que se marque.
         const range = periodRange(periodOf(date, settings.monthStart), settings.monthStart);
-        const fixedId = await insertFixed(db, {
+        await insertFixed(db, {
           type: tipo,
           name,
           category: cat,
@@ -117,10 +113,6 @@ export default function Nuevo() {
           remind_days: 2,
           start_date: range.from,
         });
-        const f = await getFixed(db, fixedId);
-        const occ = f && occurrences(f, range.from, range.to)[0];
-        if (f && occ) await markPaid(db, f, occ.due, { date, forceMovement: true });
-        else await insertMovement(db, { type: tipo, name, category: cat, amount: n, date, note: note.trim(), fixed_id: fixedId });
       }
       bump();
       router.back();
@@ -276,6 +268,22 @@ export default function Nuevo() {
             <Field value={note} onChangeText={(t) => setNote(t.slice(0, 60))} placeholder="Ej. mercado de la semana" />
           </View>
         </View>
+
+        {freq === 'ocasional' && !linked && (
+          <View style={{ gap: 6 }}>
+            <T w={800} size={14}>
+              {g ? '¿Ya lo pagaste?' : '¿Ya lo recibiste?'}
+            </T>
+            <Segmented
+              options={[
+                { id: 'si', label: g ? 'Sí, pagado' : 'Sí, recibido', activeBg: accent, activeFg: '#FFFFFF' },
+                { id: 'no', label: g ? 'No, pendiente' : 'No, por recibir' },
+              ]}
+              value={paid ? 'si' : 'no'}
+              onChange={(v) => setPaid(v === 'si')}
+            />
+          </View>
+        )}
       </Screen>
 
       <View style={[st.footer, { paddingBottom: insets.bottom + 16 }]}>
