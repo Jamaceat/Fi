@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/db
 import { backupIfDue, deleteBackup, importBackup, lastBackupAt, writeBackup, type Backup } from '@/lib/backup';
 import { fromISO, periodOf, periodRange, setSimulatedToday, todayISO, type Period } from '@/lib/dates';
 import { loadHolidays, syncHolidays, type HolidayMap } from '@/lib/holidays';
+import { syncNotifications } from '@/lib/notifications';
 
 type AppState = {
   settings: Settings;
@@ -153,6 +154,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     return () => sub.remove();
   }, [db, version, backupDays, backupLoaded]);
+
+  // Los avisos del teléfono se reprograman tras cada cambio de datos, ajustes o festivos
+  // (con una pausa, para no repetirlo en cambios seguidos).
+  useEffect(() => {
+    if (!settings || !hol) return;
+    const id = setTimeout(() => syncNotifications(db, settings, hol.map), 1500);
+    return () => clearTimeout(id);
+  }, [db, version, settings, hol]);
 
   const backupNow = async () => savedBackup(await writeBackup(db));
 

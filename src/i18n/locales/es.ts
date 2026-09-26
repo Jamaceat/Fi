@@ -1123,4 +1123,34 @@ export const es = {
     balance: 'saldo {{amount}}',
     target: 'objetivo {{amount}}',
   },
+  notifications: {
+    channel: 'Recordatorios y resumen',
+    when: {
+      today: 'hoy',
+      tomorrow: 'mañana',
+      on: 'el {{weekday}} {{date}}',
+    },
+    fixed: {
+      title: {
+        gasto: 'Pago próximo: {{name}}',
+        ingreso: 'Ingreso próximo: {{name}}',
+      },
+      body: {
+        gasto: '{{amount}} · vence {{when}}. Márcalo en Movimientos cuando lo pagues.',
+        ingreso: '{{amount}} · llega {{when}}. Márcalo en Movimientos cuando lo recibas.',
+      },
+    },
+    weekly: {
+      title: 'Tu resumen semanal',
+      body: 'La semana pasada gastaste {{spent}}. {{upcoming}}',
+      upcoming_one: 'Esta semana viene 1 pago fijo por {{amount}}.',
+      upcoming_other: 'Esta semana vienen {{count}} pagos fijos por {{amount}}.',
+      nothingDue: 'Esta semana no tienes pagos fijos pendientes.',
+    },
+    denied: {
+      title: 'Avisos desactivados',
+      text: 'Mis finanzas no tiene permiso para mostrar notificaciones. Actívalo en los ajustes del teléfono para recibir los avisos.',
+      open: 'Abrir ajustes',
+    },
+  },
 };

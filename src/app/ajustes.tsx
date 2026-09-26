@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Linking, View } from 'react-native';
 
 import {
   IconCalendar,
@@ -38,6 +38,7 @@ import { authenticate, canLock } from '@/lib/auth';
 import { clampDay, fromISO, fullDate, lastDayOfMonth, longDate, realTodayISO, todayISO, toISO } from '@/lib/dates';
 import { pickBackup, shareBackup, type Backup } from '@/lib/backup';
 import { exportCsv } from '@/lib/export';
+import { notificationsAllowed } from '@/lib/notifications';
 import { describePreset, presetName, PRESETS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
 import { common, layout } from '@/styles/common';
@@ -96,6 +97,16 @@ export default function Ajustes() {
   const setDef = (kind: Kind, patch: Partial<DefaultPeriod>) =>
     updateSettings({ defs: { ...s.defs, [kind]: { ...s.defs[kind], ...patch } } });
   const toggle = (key: keyof Settings) => updateSettings({ [key]: !s[key] });
+
+  /** Al encender un aviso del teléfono se pide el permiso; si está negado, se ofrece abrir los ajustes. */
+  const toggleAlert = async (key: 'remindFijos' | 'weekly') => {
+    toggle(key);
+    if (s[key] || (await notificationsAllowed(true))) return;
+    Alert.alert(t('notifications.denied.title'), t('notifications.denied.text'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('notifications.denied.open'), onPress: () => Linking.openSettings() },
+    ]);
+  };
 
   const toggleLock = async () => {
     if (s.lock) return updateSettings({ lock: false });
@@ -409,7 +420,7 @@ export default function Ajustes() {
               desc={t('settings.alerts.remindFixedText')}
               help={t('settings.help.remindFixed')}
               on={s.remindFijos}
-              onPress={() => toggle('remindFijos')}
+              onPress={() => toggleAlert('remindFijos')}
             />
             <SwitchRow
               label={t('settings.alerts.budget')}
@@ -442,7 +453,7 @@ export default function Ajustes() {
               desc={t('settings.alerts.weeklyText')}
               help={t('settings.help.weekly')}
               on={s.weekly}
-              onPress={() => toggle('weekly')}
+              onPress={() => toggleAlert('weekly')}
             />
             <View style={[common.divider, st.radioGroup]}>
               <Label text={t('settings.alerts.hour')} help={t('settings.help.hour')} w={700} size={14.5} />
