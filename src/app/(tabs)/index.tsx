@@ -3,7 +3,19 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { CalendarCard } from '@/components/calendar';
-import { IconChevronLeft, IconChevronRight, IconClock, IconExpense, IconGear, IconIncome } from '@/components/icons';
+import {
+  IconBars,
+  IconCalendar,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClock,
+  IconExpense,
+  IconGear,
+  IconIncome,
+  IconPiggy,
+  IconRefresh,
+  IconTarget,
+} from '@/components/icons';
 import {
   Card,
   LinkText,
@@ -20,7 +32,7 @@ import {
   Toast,
 } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, listSavings, loadFixedData, type HomeBlock, type Movement } from '@/db/repo';
+import { listMovements, listSavings, loadFixedData, totalFund, type HomeBlock, type Movement } from '@/db/repo';
 import { t } from '@/i18n';
 import { periodName, shiftPeriod, shortDate } from '@/lib/dates';
 import { fixedItems, sum } from '@/lib/finance';
@@ -30,6 +42,14 @@ import { common, layout } from '@/styles/common';
 import { styles as st } from '@/styles/screens/inicio.styles';
 
 const pct = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
+
+/** Fila de accesos rápidos: para agregar una funcionalidad, suma una entrada aquí. */
+const SHORTCUTS = [
+  { key: 'savings', Icon: IconPiggy, color: C.in, bg: C.inSoft, go: () => router.push('/ahorro') },
+  { key: 'calendar', Icon: IconCalendar, color: C.holiday, bg: C.holidaySoft, go: () => router.push('/calendario') },
+  { key: 'fixed', Icon: IconRefresh, color: C.extra, bg: C.extraSoft, go: () => router.navigate('/fijos') },
+  { key: 'months', Icon: IconBars, color: C.out, bg: C.outSoft, go: () => router.navigate('/historial') },
+] as const;
 
 /** "Fijo", "Ocasional" o "Pendiente". */
 const movementKind = (m: Movement) =>
@@ -41,19 +61,20 @@ export default function Inicio() {
 
   const data = useLoad(
     async (db) => {
-      const [movs, fixedData, savings] = await Promise.all([
+      const [movs, fixedData, savings, fund] = await Promise.all([
         listMovements(db, range.from, range.to),
         loadFixedData(db),
         listSavings(db),
+        totalFund(db),
       ]);
       const items = fixedItems(fixedData, range.from, range.to, settings.holiday, holidays);
-      return { movs, items, savings };
+      return { movs, items, savings, fund };
     },
     [range.from, range.to, settings.holiday],
   );
 
   if (!data) return <View style={layout.screen} />;
-  const { movs, items, savings } = data;
+  const { movs, items, savings, fund } = data;
 
   // Los ocasionales pendientes aún no mueven dinero.
   const gastos = movs.filter((m) => m.type === 'gasto' && m.paid);
@@ -125,6 +146,43 @@ export default function Inicio() {
           </View>
         </Row>
       </Tap>
+    ),
+
+    fund: (
+      <Card style={st.fund}>
+        <View style={[common.iconTile, st.fundIcon]}>
+          <IconTarget color={C.extra} />
+        </View>
+        <Stack gap={2} style={layout.fillShrink}>
+          <T w={700} size={12.5} color={C.muted}>
+            {t('home.fund.title')}
+          </T>
+          <T serif size={24} tabular numberOfLines={1} adjustsFontSizeToFit>
+            {hide ? MASKED_AMOUNT : fmtBalance(fund.balance)}
+          </T>
+          <T size={12.5} color={C.muted}>
+            {fund.months > 0 ? t('home.fund.months', { count: fund.months }) : t('home.fund.empty')}
+          </T>
+        </Stack>
+      </Card>
+    ),
+
+    shortcuts: (
+      <Card style={st.shortcuts}>
+        {SHORTCUTS.map(({ key, Icon, color, bg, go }) => {
+          const name = t(`home.shortcuts.${key}`);
+          return (
+            <Tap key={key} onPress={go} style={st.shortcut} accessibilityLabel={t('home.shortcuts.open', { name })}>
+              <View style={[common.iconTile, st.shortcutIcon, { backgroundColor: bg }]}>
+                <Icon size={22} color={color} />
+              </View>
+              <T w={700} size={12.5} numberOfLines={1}>
+                {name}
+              </T>
+            </Tap>
+          );
+        })}
+      </Card>
     ),
 
     savings: (

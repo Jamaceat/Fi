@@ -159,6 +159,19 @@ export const es = {
       spent: 'Has gastado el {{pct}} % de tus ingresos',
       noIncome: 'Aún no registras ingresos este mes',
     },
+    fund: {
+      title: 'Fondo total',
+      months_one: 'Acumulado de {{count}} mes',
+      months_other: 'Acumulado de {{count}} meses',
+      empty: 'Aún no hay movimientos',
+    },
+    shortcuts: {
+      open: 'Abrir {{name}}',
+      savings: 'Ahorro',
+      calendar: 'Calendario',
+      fixed: 'Fijos',
+      months: 'Meses',
+    },
     savings: {
       open: 'Abrir ahorro',
       total: 'Ahorro total',
@@ -929,6 +942,8 @@ export const es = {
     reset: 'Restablecer orden original',
     blocks: {
       hero: { title: 'Balance del mes', desc: 'Disponible, ingresos y gastos' },
+      fund: { title: 'Fondo total', desc: 'Disponible sumando todos los meses' },
+      shortcuts: { title: 'Accesos rápidos', desc: 'Ahorro, calendario, fijos y meses' },
       savings: { title: 'Ahorro total', desc: 'Saldo y lo ahorrado este mes' },
       pending: { title: 'Ingreso fijo pendiente', desc: 'Solo aparece si falta uno por recibir' },
       calendar: { title: 'Calendario', desc: 'Pagos y festivos del mes' },

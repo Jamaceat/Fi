@@ -55,7 +55,15 @@ export const IconWrench = make(
   ['M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'],
   1.9,
 );
-export const IconPending = make(['M20.5 12a8.5 8.5 0 1 1-4.2-7.3', 'M12 7.5V12l2.8 1.8', 'M19.5 3.5v4M19.5 10h.01'], 1.9);
+export const IconPiggy = make(
+  [
+    'M19 11c0-3.3-3.1-6-7-6S5 7.7 5 11c0 1.9 1 3.6 2.6 4.7L8 19h3v-2h2v2h3l.5-3.1c.9-.6 1.6-1.4 2-2.4H21v-3h-2.2c-.2-.6-.5-1.2-.8-1.7L19 6.5l-2.7.6',
+    'M9 9.5h3',
+    'M15.5 11h.01',
+  ],
+  1.9,
+);
+export const IconPending =make(['M20.5 12a8.5 8.5 0 1 1-4.2-7.3', 'M12 7.5V12l2.8 1.8', 'M19.5 3.5v4M19.5 10h.01'], 1.9);
 export const IconGear = ({ size = 19, color = C.ink, stroke = 1.9 }: P) => (
   <Svg {...base(size, color, stroke)}>
     <Circle cx={12} cy={12} r={3} />

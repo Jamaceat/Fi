@@ -38,6 +38,8 @@ const DARK = { fg: C.bg, sub: C.heroSub };
 const LIGHT = { bg: C.card, fg: C.ink, sub: C.muted, border: C.line };
 const LOOKS: Record<HomeBlock, Look> = {
   hero: { bg: C.hero, ...DARK },
+  fund: LIGHT,
+  shortcuts: LIGHT,
   savings: { bg: C.inDark, fg: C.inHeroText, sub: C.inSub },
   pending: LIGHT,
   calendar: LIGHT,

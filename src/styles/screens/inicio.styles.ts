@@ -6,6 +6,11 @@ export const styles = StyleSheet.create({
   hero: { backgroundColor: C.hero, borderRadius: 24, padding: 22, gap: 18 },
   heroAmount: { letterSpacing: -1 },
   tile: { flex: 1, backgroundColor: C.heroTile, borderRadius: 16, padding: 14, gap: 6 },
+  fund: { paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fundIcon: { backgroundColor: C.extraSoft },
+  shortcuts: { paddingVertical: 14, paddingHorizontal: 8, flexDirection: 'row' },
+  shortcut: { flex: 1, alignItems: 'center', gap: 8 },
+  shortcutIcon: { width: 48, height: 48, borderRadius: 16 },
   savings: {
     backgroundColor: C.inDark,
     borderRadius: 18,

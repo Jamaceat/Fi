@@ -64,17 +64,24 @@ export type Goal = { id: number; name: string; target: number; saved: number; la
 export type DefaultPeriod = { preset: Preset; n: number; unit: Unit };
 
 /** Bloques de Inicio que se pueden reordenar desde Ajustes. */
-export const HOME_BLOCKS = ['hero', 'savings', 'pending', 'calendar', 'breakdown', 'recent'] as const;
+export const HOME_BLOCKS = ['hero', 'fund', 'shortcuts', 'savings', 'pending', 'calendar', 'breakdown', 'recent'] as const;
 export type HomeBlock = (typeof HOME_BLOCKS)[number];
 
-/** Quita ids desconocidos o repetidos y agrega al final los bloques que falten. */
+/**
+ * Quita ids desconocidos o repetidos. Los bloques que falten (p. ej. uno nuevo) se insertan
+ * justo después del bloque que los precede en el orden original.
+ */
 export function normalizeHomeOrder(order: unknown): HomeBlock[] {
   const known = new Set<string>(HOME_BLOCKS);
   const seen = new Set<HomeBlock>();
   if (Array.isArray(order)) {
     for (const id of order) if (known.has(id)) seen.add(id as HomeBlock);
   }
-  return [...seen, ...HOME_BLOCKS.filter((b) => !seen.has(b))];
+  const result = [...seen];
+  HOME_BLOCKS.forEach((b, i) => {
+    if (!seen.has(b)) result.splice(i === 0 ? 0 : result.indexOf(HOME_BLOCKS[i - 1]) + 1, 0, b);
+  });
+  return result;
 }
 
 export type Settings = {
@@ -148,6 +155,22 @@ export const listMovements = (db: SQLiteDatabase, from: string, to: string) =>
     from,
     to,
   );
+
+/**
+ * Fondo total: lo que queda de todos los meses juntos (ingresos − gastos pagados/recibidos).
+ * `months` = cuántos meses distintos tienen movimientos.
+ */
+export async function totalFund(db: SQLiteDatabase) {
+  const row = await db.getFirstAsync<{ income: number | null; expense: number | null; months: number }>(
+    `SELECT SUM(CASE WHEN type = 'ingreso' THEN amount ELSE 0 END) AS income,
+            SUM(CASE WHEN type = 'gasto' THEN amount ELSE 0 END) AS expense,
+            COUNT(DISTINCT substr(date, 1, 7)) AS months
+     FROM movements WHERE paid = 1`,
+  );
+  const income = row?.income ?? 0;
+  const expense = row?.expense ?? 0;
+  return { income, expense, balance: income - expense, months: row?.months ?? 0 };
+}
 
 export const getMovement = (db: SQLiteDatabase, id: number) =>
   db.getFirstAsync<Movement>('SELECT * FROM movements WHERE id = ?', id);
