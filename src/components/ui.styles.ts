@@ -108,7 +108,6 @@ export const styles = StyleSheet.create({
   sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: C.backdrop },
   sheet: {
-    maxHeight: '85%',
     backgroundColor: C.bg,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -34,6 +33,7 @@ import { initial } from '@/lib/format';
 import { layout } from '@/styles/common';
 
 import { IconCheck, IconChevronLeft, IconClose, IconInfo } from './icons';
+import { useKeyboardHeight } from './use-keyboard-height';
 import { styles as s } from './ui.styles';
 
 // ——— Texto ———
@@ -138,18 +138,54 @@ export function Screen({
     [bottom, insets.top],
   );
 
+  // El teclado le quita espacio a la pantalla; si tapa el campo enfocado, se sube hasta él.
+  const keyboard = useKeyboardHeight();
+  const scrollY = useRef(0);
+  const wrapStyle = useAnimatedStyle(() => ({ paddingBottom: keyboard.get() }));
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      // Espera a que el ScrollView termine de encogerse para medir lo visible.
+      timer = setTimeout(() => {
+        const input = TextInput.State.currentlyFocusedInput();
+        const sv = scroll.current;
+        const inner = content.current;
+        if (!input || !sv || !inner) return;
+        input.measureLayout(
+          inner,
+          (_x, y, _w, h) => {
+            const top = scrollY.current + insets.top + 16;
+            const end = scrollY.current + viewHeight.current - 24;
+            if (y >= top && y + h <= end) return;
+            sv.scrollTo({ y: Math.max(0, y + h + 24 - viewHeight.current), animated: true });
+          },
+          // El campo no está en esta pantalla (p. ej. dentro de un Sheet).
+          () => {},
+        );
+      }, 260);
+    });
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
+  }, [insets.top]);
+
   return (
     <ScreenScroll.Provider value={scrollIntoView}>
-      <ScrollView
-        ref={scroll}
-        // Los tipos de RN aún piden RefObject<View> sin null (anterior a React 19).
-        innerViewRef={content as RefObject<View>}
-        style={s.screen}
-        contentContainerStyle={[s.screenContent, { paddingTop: insets.top + 16, paddingBottom: bottom, gap }]}
-        onLayout={(e) => (viewHeight.current = e.nativeEvent.layout.height)}
-        keyboardShouldPersistTaps="handled">
-        {children}
-      </ScrollView>
+      <Animated.View style={[s.screen, wrapStyle]}>
+        <ScrollView
+          ref={scroll}
+          // Los tipos de RN aún piden RefObject<View> sin null (anterior a React 19).
+          innerViewRef={content as RefObject<View>}
+          style={layout.fill}
+          contentContainerStyle={[s.screenContent, { paddingTop: insets.top + 16, paddingBottom: bottom, gap }]}
+          onLayout={(e) => (viewHeight.current = e.nativeEvent.layout.height)}
+          onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={32}
+          keyboardShouldPersistTaps="handled">
+          {children}
+        </ScrollView>
+      </Animated.View>
     </ScreenScroll.Provider>
   );
 }
@@ -596,6 +632,7 @@ export function Sheet({
 
   const fade = useSharedValue(0); // fondo oscuro: solo aparece, no se desliza
   const slide = useSharedValue(0); // panel: sube desde abajo
+  const keyboard = useKeyboardHeight();
 
   useEffect(() => {
     const ms = (n: number) => (reduceMotion ? 0 : n);
@@ -618,15 +655,21 @@ export function Sheet({
   }, [visible, reduceMotion, fade, slide]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: fade.get() }));
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - slide.get()) * height }] }));
+  // La hoja se apoya sobre el teclado y se encoge para caber en lo que queda.
+  const wrapStyle = useAnimatedStyle(() => ({ paddingBottom: keyboard.get() }));
+  const sheetStyle = useAnimatedStyle(() => ({
+    maxHeight: (height - keyboard.get()) * 0.85,
+    paddingBottom: keyboard.get() > 0 ? 24 : insets.bottom + 24,
+    transform: [{ translateY: (1 - slide.get()) * height }],
+  }));
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.sheetWrap}>
+      <Animated.View style={[s.sheetWrap, wrapStyle]}>
         <Animated.View style={[s.backdrop, backdropStyle]}>
           <Pressable style={layout.fill} onPress={onClose} accessibilityLabel={t('ui.closePanel')} />
         </Animated.View>
-        <Animated.View style={[s.sheet, { paddingBottom: insets.bottom + 24 }, sheetStyle]}>
+        <Animated.View style={[s.sheet, sheetStyle]}>
           <View style={s.handle} />
           <ScrollView contentContainerStyle={s.sheetContent} keyboardShouldPersistTaps="handled">
             {title !== undefined && (
@@ -642,7 +685,7 @@ export function Sheet({
             {children}
           </ScrollView>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </Animated.View>
     </Modal>
   );
 }

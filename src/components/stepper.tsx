@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   Text,
   TextInput,
@@ -20,6 +18,7 @@ import { layout } from '@/styles/common';
 
 import { IconMinus, IconPlus } from './icons';
 import { G, styles as st } from './stepper.styles';
+import { useKeyboardHeight } from './use-keyboard-height';
 
 /**
  * Inicio de cada zona, como fracción de media barra: quieto, un solo paso, de a uno lento,
@@ -146,6 +145,9 @@ export function Stepper({
     };
   });
   const backdropStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, progress.get()) }));
+  // El panel se centra en el espacio que deja libre el teclado.
+  const keyboard = useKeyboardHeight();
+  const modalStyle = useAnimatedStyle(() => ({ paddingBottom: keyboard.get() }));
 
   // ——— Barra ———
 
@@ -204,7 +206,7 @@ export function Stepper({
         onRequestClose={hide}>
         {/* Los gestos dentro de un Modal necesitan su propia raíz. */}
         <GestureHandlerRootView style={layout.fill}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.modal}>
+          <Animated.View style={[st.modal, modalStyle]}>
             <Animated.View style={[st.backdrop, backdropStyle]}>
               <Pressable style={layout.fill} onPress={hide} accessibilityLabel={t('ui.closePanel')} />
             </Animated.View>
@@ -268,7 +270,7 @@ export function Stepper({
                 <Text style={st.doneText}>{t('ui.done')}</Text>
               </Pressable>
             </Animated.View>
-          </KeyboardAvoidingView>
+          </Animated.View>
         </GestureHandlerRootView>
       </Modal>
     </>
