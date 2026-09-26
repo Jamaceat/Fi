@@ -60,19 +60,36 @@ export type FixedStatus = {
   resolved_at: string | null;
 };
 
+/** De dónde sale un aporte a una meta: fondo total, lo libre del ahorro u otra meta. */
+export type GoalSource = 'fund' | 'free' | 'goal';
+
 /**
  * Registro del ahorro. `after` = saldo libre (sin lo bloqueado en metas) después del registro.
- * add: sale del fondo · withdraw: vuelve al fondo · update: intereses/bajas · goal: aporte a la meta `goal_id`.
+ * `delta` = cambio del ahorro total.
+ * add: sale del fondo · withdraw: vuelve al fondo · update: intereses/bajas ·
+ * goal: aporte de `amount` a la meta `goal_id` desde `source` (`from_goal_id` si viene de otra meta) ·
+ * release: lo apartado en la meta eliminada `goal_id` (`amount`) vuelve al fondo.
  */
 export type SavingsEntry = {
   id: number;
-  kind: 'add' | 'update' | 'withdraw' | 'goal';
+  kind: 'add' | 'update' | 'withdraw' | 'goal' | 'release';
   date: string;
   delta: number;
   after: number;
   goal_id: number | null;
+  amount: number;
+  source: GoalSource | null;
+  from_goal_id: number | null;
 };
-export type Goal = { id: number; name: string; target: number; saved: number; last_date: string | null };
+/** `deleted_at` = meta eliminada que se conserva por su historial. */
+export type Goal = {
+  id: number;
+  name: string;
+  target: number;
+  saved: number;
+  last_date: string | null;
+  deleted_at: string | null;
+};
 
 export type DefaultPeriod = { preset: Preset; n: number; unit: Unit };
 
@@ -441,21 +458,23 @@ export const skipOccurrence = (db: SQLiteDatabase, fixedId: number, due: string)
 export const listSavings = (db: SQLiteDatabase) =>
   db.getAllAsync<SavingsEntry>('SELECT * FROM savings_entries ORDER BY date DESC, id DESC');
 
-type SavingsInput = Omit<SavingsEntry, 'id' | 'goal_id'> & { goal_id?: number | null };
+type SavingsInput = Pick<SavingsEntry, 'kind' | 'date' | 'delta' | 'after'> &
+  Partial<Pick<SavingsEntry, 'goal_id' | 'amount' | 'source' | 'from_goal_id'>>;
 
 /**
  * Crea el movimiento confirmado de un registro del ahorro que mueve el fondo total:
- * aporte directo o a una meta = gasto; retiro = ingreso. Las actualizaciones no crean nada.
+ * aporte directo o a una meta desde el fondo = gasto; retiro o meta eliminada = ingreso.
+ * Las actualizaciones y lo que solo cambia de lugar dentro del ahorro (delta 0) no crean nada.
  */
 async function insertSavingsMovement(db: SQLiteDatabase, id: number, e: SavingsInput) {
   if (e.kind === 'update' || e.delta === 0) return;
-  let name = t(`savings.movement.${e.kind}`);
-  if (e.kind === 'goal') {
+  let name = '';
+  if (e.kind === 'goal' || e.kind === 'release') {
     const goal = await db.getFirstAsync<{ name: string }>('SELECT name FROM goals WHERE id = ?', e.goal_id ?? -1);
-    name = t('savings.movement.goal', { name: goal?.name ?? '' });
-  }
+    name = t(`savings.movement.${e.kind}`, { name: goal?.name ?? '' });
+  } else name = t(`savings.movement.${e.kind}`);
   await insertMovement(db, {
-    type: e.kind === 'withdraw' ? 'ingreso' : 'gasto',
+    type: e.kind === 'withdraw' || e.kind === 'release' ? 'ingreso' : 'gasto',
     name,
     category: t('savings.movement.category'),
     amount: Math.abs(e.delta),
@@ -468,10 +487,19 @@ async function insertSavingsMovement(db: SQLiteDatabase, id: number, e: SavingsI
 /** Guarda el registro y su movimiento. Sin transacción propia: la pone quien llama. */
 async function recordSavings(db: SQLiteDatabase, e: SavingsInput) {
   const r = await db.runAsync(
-    'INSERT INTO savings_entries (kind, date, delta, after, goal_id) VALUES (?, ?, ?, ?, ?)',
-    e.kind, e.date, e.delta, e.after, e.goal_id ?? null,
+    `INSERT INTO savings_entries (kind, date, delta, after, goal_id, amount, source, from_goal_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    e.kind, e.date, e.delta, e.after, e.goal_id ?? null, e.amount ?? 0, e.source ?? null, e.from_goal_id ?? null,
   );
   await insertSavingsMovement(db, r.lastInsertRowId, e);
+}
+
+/** Saldo libre del ahorro según el último registro. */
+async function freeBalance(db: SQLiteDatabase) {
+  const row = await db.getFirstAsync<{ after: number }>(
+    'SELECT after FROM savings_entries ORDER BY date DESC, id DESC LIMIT 1',
+  );
+  return row?.after ?? 0;
 }
 
 export const insertSavings = (db: SQLiteDatabase, e: SavingsInput) =>
@@ -484,13 +512,14 @@ export const insertSavings = (db: SQLiteDatabase, e: SavingsInput) =>
 export async function fillSavingsMovements(db: SQLiteDatabase) {
   const orphans = await db.getAllAsync<SavingsEntry>(
     `SELECT * FROM savings_entries
-     WHERE kind IN ('add', 'withdraw', 'goal')
+     WHERE kind IN ('add', 'withdraw', 'goal', 'release')
        AND id NOT IN (SELECT savings_id FROM movements WHERE savings_id IS NOT NULL)
      ORDER BY id`,
   );
   for (const e of orphans) await insertSavingsMovement(db, e.id, e);
 }
 
+/** Todas las metas, también las eliminadas (sus registros siguen en el historial). */
 export const listGoals = (db: SQLiteDatabase) => db.getAllAsync<Goal>('SELECT * FROM goals ORDER BY id');
 
 export async function insertGoal(db: SQLiteDatabase, name: string, target: number) {
@@ -498,24 +527,77 @@ export async function insertGoal(db: SQLiteDatabase, name: string, target: numbe
   return r.lastInsertRowId;
 }
 
-/** Aporta a una meta y lo deja en el historial del ahorro. `free` = saldo libre actual (no cambia). */
-export async function contributeGoal(db: SQLiteDatabase, id: number, amount: number, free: number) {
+export type GoalFrom = { source: 'fund' | 'free' } | { source: 'goal'; goalId: number };
+
+/**
+ * Aporta a una meta y lo deja en el historial del ahorro.
+ * Desde el fondo total el ahorro crece y se crea su gasto; desde lo libre o desde otra meta el
+ * dinero ya estaba ahorrado: solo cambia de lugar (resta en el origen, suma en la meta, sin movimiento).
+ * Devuelve false si lo libre o la meta de origen ya no alcanzan (el fondo total lo comprueba quien llama).
+ */
+export async function contributeGoal(db: SQLiteDatabase, id: number, amount: number, from: GoalFrom = { source: 'fund' }) {
   const today = todayISO();
+  let ok = true;
   await db.withTransactionAsync(async () => {
+    const free = await freeBalance(db);
+    if (from.source === 'free' && amount > free) {
+      ok = false;
+      return;
+    }
+    if (from.source === 'goal') {
+      const r = await db.runAsync(
+        'UPDATE goals SET saved = saved - ? WHERE id = ? AND id <> ? AND saved >= ? AND deleted_at IS NULL',
+        amount, from.goalId, id, amount,
+      );
+      if (!r.changes) {
+        ok = false;
+        return;
+      }
+    }
     await db.runAsync('UPDATE goals SET saved = saved + ?, last_date = ? WHERE id = ?', amount, today, id);
-    await recordSavings(db, { kind: 'goal', date: today, delta: amount, after: free, goal_id: id });
+    await recordSavings(db, {
+      kind: 'goal',
+      date: today,
+      delta: from.source === 'fund' ? amount : 0,
+      after: from.source === 'free' ? free - amount : free,
+      goal_id: id,
+      amount,
+      source: from.source,
+      from_goal_id: from.source === 'goal' ? from.goalId : null,
+    });
   });
+  return ok;
 }
 
-/** Borra la meta, sus aportes y sus movimientos; lo apartado en ella vuelve al fondo total. */
+/**
+ * Elimina una meta; lo apartado en ella vuelve al fondo total como ingreso (registro 'release').
+ * Sin registros se borra del todo; con registros queda marcada como eliminada para que el
+ * historial (el suyo y el de las metas con las que intercambió dinero) conserve su nombre.
+ */
 export async function deleteGoal(db: SQLiteDatabase, id: number) {
   await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      'DELETE FROM movements WHERE savings_id IN (SELECT id FROM savings_entries WHERE goal_id = ?)',
-      id,
+    const goal = await db.getFirstAsync<Goal>('SELECT * FROM goals WHERE id = ?', id);
+    if (!goal) return;
+    const used = await db.getFirstAsync(
+      'SELECT 1 FROM savings_entries WHERE goal_id = ? OR from_goal_id = ? LIMIT 1',
+      id, id,
     );
-    await db.runAsync('DELETE FROM savings_entries WHERE goal_id = ?', id);
-    await db.runAsync('DELETE FROM goals WHERE id = ?', id);
+    if (!used) {
+      await db.runAsync('DELETE FROM goals WHERE id = ?', id);
+      return;
+    }
+    const today = todayISO();
+    if (goal.saved > 0) {
+      await recordSavings(db, {
+        kind: 'release',
+        date: today,
+        delta: -goal.saved,
+        after: await freeBalance(db),
+        goal_id: id,
+        amount: goal.saved,
+      });
+    }
+    await db.runAsync('UPDATE goals SET saved = 0, deleted_at = ? WHERE id = ?', today, id);
   });
 }
 

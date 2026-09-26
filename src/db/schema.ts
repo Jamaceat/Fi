@@ -3,7 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { fillSavingsMovements } from './repo';
 
 export const DB_NAME = 'finanzas.db';
-const DATABASE_VERSION = 10;
+const DATABASE_VERSION = 11;
 
 /**
  * Crea el movimiento de los fijos pagados/recibidos que no lo tienen (antes se podía apagar
@@ -24,6 +24,14 @@ UPDATE fixed_status SET movement_id = (
   ORDER BY m.id DESC LIMIT 1
 )
 WHERE status = 'paid' AND movement_id IS NULL;
+`;
+
+/**
+ * Los aportes a metas anteriores a v11 salieron todos del fondo total y su monto es el delta.
+ * Corre al migrar y al restaurar un respaldo anterior.
+ */
+export const FILL_SAVINGS_SOURCE = `
+UPDATE savings_entries SET amount = delta, source = 'fund' WHERE kind = 'goal' AND source IS NULL;
 `;
 
 /** Se ejecuta en SQLiteProvider.onInit antes de renderizar la app. */
@@ -235,6 +243,34 @@ ALTER TABLE movements ADD COLUMN savings_id INTEGER;
     }
     await fillSavingsMovements(db);
     version = 10;
+  }
+
+  if (version === 10) {
+    await db.execAsync(`
+-- Los aportes a metas pueden salir del fondo total, de lo libre del ahorro o de otra meta.
+-- amount = lo que se movió (delta es el cambio del ahorro total: 0 si el dinero ya estaba ahorrado).
+-- source = 'fund' | 'free' | 'goal' (from_goal_id = meta de origen).
+-- 'release' = lo apartado en una meta eliminada vuelve al fondo total.
+CREATE TABLE savings_entries_v11 (
+  id INTEGER PRIMARY KEY NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('add','update','withdraw','goal','release')),
+  date TEXT NOT NULL,
+  delta INTEGER NOT NULL,
+  after INTEGER NOT NULL,
+  goal_id INTEGER,
+  amount INTEGER NOT NULL DEFAULT 0,
+  source TEXT,
+  from_goal_id INTEGER
+);
+INSERT INTO savings_entries_v11 (id, kind, date, delta, after, goal_id)
+SELECT id, kind, date, delta, after, goal_id FROM savings_entries;
+DROP TABLE savings_entries;
+ALTER TABLE savings_entries_v11 RENAME TO savings_entries;
+
+-- Una meta con historial no se borra: queda eliminada para que sus registros conserven el nombre.
+ALTER TABLE goals ADD COLUMN deleted_at TEXT;
+${FILL_SAVINGS_SOURCE}`);
+    version = 11;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

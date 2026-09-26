@@ -8,6 +8,7 @@ import { IconClose, IconMinus, IconPlus, IconRefresh, IconTarget } from '@/compo
 import {
   AmountField,
   Card,
+  Chip,
   Field,
   Header,
   Label,
@@ -15,6 +16,7 @@ import {
   Progress,
   Row,
   Screen,
+  Segmented,
   Sheet,
   Stack,
   T,
@@ -31,6 +33,8 @@ import {
   listSavings,
   totalFund,
   type Goal,
+  type GoalFrom,
+  type GoalSource,
   type SavingsEntry,
 } from '@/db/repo';
 import { t } from '@/i18n';
@@ -47,6 +51,81 @@ const QUICK_AMOUNTS = [50000, 100000, 200000];
 
 const pctOf = (saved: number, target: number) => (target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0);
 
+/** Orígenes de un aporte a una meta, en el orden de las pestañas. */
+const SOURCES: GoalSource[] = ['fund', 'free', 'goal'];
+
+/** Historial: todo el ahorro, solo lo libre o una meta (su id). */
+type HistFilter = 'all' | 'free' | number;
+
+/** Fila del historial. `moved` = solo cambió de lugar dentro del ahorro (el total no cambia). */
+type HistRow = { e: SavingsEntry; title: string; meta: string; value: number; moved?: boolean };
+
+const goalName = (g: Goal | undefined) =>
+  !g ? '' : g.deleted_at ? t('savings.history.deletedGoal', { name: g.name }) : g.name;
+
+/**
+ * Filas del historial según el filtro. Lo libre muestra lo que cambia su saldo; una meta, sus
+ * aportes, lo que pasó a otras metas y su saldo después de cada registro.
+ */
+function historyRows(entries: SavingsEntry[], filter: HistFilter, goalsById: Map<number, Goal>): HistRow[] {
+  const name = (id: number | null) => goalName(goalsById.get(id ?? -1));
+  const fromText = (e: SavingsEntry) =>
+    e.source === 'goal'
+      ? t('savings.history.from.goal', { name: name(e.from_goal_id) })
+      : t(`savings.history.from.${e.source ?? 'fund'}`);
+
+  if (typeof filter === 'number') {
+    const rows: HistRow[] = [];
+    let balance = 0;
+    // El saldo se acumula del registro más viejo al más nuevo.
+    for (const e of [...entries].reverse()) {
+      let title: string;
+      let value: number;
+      if (e.kind === 'goal' && e.goal_id === filter) {
+        value = e.amount;
+        title =
+          e.source === 'goal'
+            ? t('savings.history.in.goal', { name: name(e.from_goal_id) })
+            : t(`savings.history.in.${e.source ?? 'fund'}`);
+      } else if (e.kind === 'goal' && e.from_goal_id === filter) {
+        value = -e.amount;
+        title = t('savings.history.sentTo', { name: name(e.goal_id) });
+      } else if (e.kind === 'release' && e.goal_id === filter) {
+        value = -e.amount;
+        title = t('savings.history.releaseSelf');
+      } else continue;
+      balance += value;
+      rows.push({ e, title, value, meta: joinMeta(shortDate(e.date), t('savings.history.goalBalance', { amount: fmt(balance) })) });
+    }
+    return rows.reverse();
+  }
+
+  const rows: HistRow[] = [];
+  for (const e of entries) {
+    const freeMeta = joinMeta(shortDate(e.date), t('savings.history.balance', { amount: fmt(e.after) }));
+    if (e.kind === 'goal') {
+      const title = t('savings.history.goalTo', { name: name(e.goal_id) });
+      if (filter === 'all') {
+        rows.push({ e, title, value: e.amount, moved: e.source !== 'fund', meta: joinMeta(shortDate(e.date), fromText(e)) });
+      } else if (e.source === 'free') {
+        rows.push({ e, title, value: -e.amount, meta: freeMeta });
+      }
+    } else if (e.kind === 'release') {
+      if (filter === 'all') {
+        rows.push({
+          e,
+          title: t('savings.history.release', { name: name(e.goal_id) }),
+          value: -e.amount,
+          meta: joinMeta(shortDate(e.date), t('savings.history.releaseMeta')),
+        });
+      }
+    } else {
+      rows.push({ e, title: t(`savings.history.${e.kind}`), value: e.delta, meta: freeMeta });
+    }
+  }
+  return rows;
+}
+
 export default function Ahorro() {
   const db = useSQLiteContext();
   const { currentPeriod, settings, bump } = useApp();
@@ -57,6 +136,10 @@ export default function Ahorro() {
   /** Nueva meta: aporte inicial opcional (sale del fondo total), aparte del objetivo. */
   const [startInput, setStartInput] = useState('');
   const [startOpen, setStartOpen] = useState(false);
+  /** Aportar a una meta: de dónde sale el dinero y, si es de otra meta, cuál. */
+  const [source, setSource] = useState<GoalSource>('fund');
+  const [srcGoalId, setSrcGoalId] = useState<number | null>(null);
+  const [histFilter, setHistFilter] = useState<HistFilter>('all');
   const [result, setResult] = useState<{ title: string; text: string; negative?: boolean } | null>(null);
 
   const data = useLoad(async (d) => {
@@ -64,7 +147,8 @@ export default function Ahorro() {
     return { entries, goals, fund: fund.balance };
   }, []);
   const entries = data?.entries ?? [];
-  const goals = data?.goals ?? [];
+  const allGoals = data?.goals ?? [];
+  const goals = allGoals.filter((g) => !g.deleted_at);
   /** Lo que se puede pasar al ahorro: el fondo total, nunca menos de 0. */
   const fund = data?.fund ?? 0;
   const fundAvailable = Math.max(0, fund);
@@ -78,19 +162,29 @@ export default function Ahorro() {
   const lastDate = entries[0] ? shortDate(entries[0].date) : '—';
   const range = periodRange(currentPeriod, settings.monthStart);
   const monthTotal = entries.filter((e) => e.date >= range.from && e.date < range.to).reduce((s, e) => s + e.delta, 0);
-  const goalsById = new Map(goals.map((g) => [g.id, g]));
-  const goal = sheet === 'goal' ? goalsById.get(goalId ?? -1) : undefined;
+  const goalsById = new Map(allGoals.map((g) => [g.id, g]));
+  const goal = sheet === 'goal' ? goals.find((g) => g.id === goalId) : undefined;
   const amount = Number(input) || 0;
 
-  /** Agregar dinero y aportar a una meta sacan la plata del fondo total. */
-  const fromFund = sheet === 'add' || sheet === 'goal';
+  // Aporte a una meta: sale del fondo total, de lo libre del ahorro o de otra meta.
+  const otherGoals = goal ? goals.filter((g) => g.id !== goal.id) : [];
+  const srcGoal = source === 'goal' ? otherGoals.find((g) => g.id === srcGoalId) : undefined;
+  const goalFrom: GoalFrom | null = source === 'goal' ? (srcGoal ? { source, goalId: srcGoal.id } : null) : { source };
+  /** Lo que el origen elegido puede poner en la meta. */
+  const sourceAvailable = source === 'fund' ? fundAvailable : source === 'free' ? freeAvailable : Math.max(0, srcGoal?.saved ?? 0);
+
+  /** Agregar dinero y aportar a una meta desde el fondo sacan la plata del fondo total. */
+  const fromFund = sheet === 'add' || (sheet === 'goal' && source === 'fund');
   const overFund = fromFund && amount > fundAvailable;
   const overFree = sheet === 'withdraw' && amount > freeAvailable;
+  /** Aporte desde lo libre o desde otra meta por encima de lo que tiene. */
+  const overSource = sheet === 'goal' && source !== 'fund' && amount > sourceAvailable;
   const belowLocked = sheet === 'update' && !!input && amount < locked;
   const start = Number(startInput) || 0;
   const overStart = sheet === 'newGoal' && start > fundAvailable;
   /** Tope de los montos rápidos y del botón "Todo". */
-  const limit = fromFund ? fundAvailable : sheet === 'withdraw' ? freeAvailable : null;
+  const limit =
+    sheet === 'goal' ? sourceAvailable : sheet === 'add' ? fundAvailable : sheet === 'withdraw' ? freeAvailable : null;
 
   const open = (k: SheetKind, gid: number | null = null) => {
     setSheet(k);
@@ -98,6 +192,10 @@ export default function Ahorro() {
     setInput('');
     setNameInput('');
     setStartInput('');
+    setSource('fund');
+    // Si se elige "Otra meta", arranca en la primera que tenga saldo.
+    const others = goals.filter((g) => g.id !== gid);
+    setSrcGoalId((others.find((g) => g.saved > 0) ?? others[0])?.id ?? null);
   };
   const close = () => setSheet(null);
 
@@ -128,6 +226,19 @@ export default function Ahorro() {
   } else if (overFund) {
     previewTitle = t('savings.preview.notEnough');
     previewValue = fmt(fundAvailable);
+    previewNeg = true;
+  } else if (sheet === 'goal' && source !== 'fund' && sourceAvailable <= 0) {
+    previewTitle =
+      source === 'free'
+        ? t('savings.preview.noFreeForGoal')
+        : srcGoal
+          ? t('savings.preview.noGoalBalance', { name: srcGoal.name })
+          : t('savings.preview.pickGoal');
+    previewNeg = true;
+  } else if (overSource) {
+    previewTitle =
+      source === 'free' ? t('savings.preview.notEnoughFreeGoal') : t('savings.preview.notEnoughGoal', { name: srcGoal?.name ?? '' });
+    previewValue = fmt(sourceAvailable);
     previewNeg = true;
   } else if (sheet === 'withdraw') {
     if (freeAvailable <= 0) {
@@ -167,7 +278,7 @@ export default function Ahorro() {
       ? !input || belowLocked
       : sheet === 'newGoal'
         ? amount <= 0 || !nameInput.trim() || overStart
-        : amount <= 0 || overFund || overFree;
+        : amount <= 0 || overFund || overFree || overSource || (sheet === 'goal' && !goalFrom);
 
   const sheetTitle = sheet === 'goal' && goal ? t('savings.sheet.contributeTo', { name: goal.name }) : sheet ? t(`savings.sheet.title.${sheet}`) : '';
 
@@ -192,7 +303,14 @@ export default function Ahorro() {
     refValue = free;
   } else if (goal) {
     refTitle = t('savings.sheet.goalSaved');
-    refSub = joinMeta(t('savings.sheet.goalTarget', { amount: fmt(goal.target) }), t('savings.sheet.fundShort', { amount: fmt(fund) }));
+    refSub = joinMeta(
+      t('savings.sheet.goalTarget', { amount: fmt(goal.target) }),
+      source === 'fund'
+        ? t('savings.sheet.fundShort', { amount: fmt(fund) })
+        : source === 'free'
+          ? t('savings.sheet.freeShort', { amount: fmt(free) })
+          : srcGoal && t('savings.sheet.goalShort', { name: srcGoal.name, amount: fmt(srcGoal.saved) }),
+    );
     refValue = goal.saved;
   }
 
@@ -231,21 +349,29 @@ export default function Ahorro() {
         title: t('savings.result.withdrew', { amount: fmt(amount) }),
         text: t('savings.result.withdrewText', { free: fmt(free - amount) }),
       });
-    } else if (sheet === 'goal' && goal) {
-      await contributeGoal(db, goal.id, amount, free);
+    } else if (sheet === 'goal' && goal && goalFrom) {
+      // Lo libre o la meta de origen también se comprueban de nuevo al guardar.
+      if (!(await contributeGoal(db, goal.id, amount, goalFrom))) {
+        bump();
+        return;
+      }
       const saved = goal.saved + amount;
       const left = Math.max(0, goal.target - saved);
       setResult({
         title: t('savings.result.contributed', { amount: fmt(amount), name: goal.name }),
         text: joinMeta(
           left > 0 ? t('savings.result.progress', { pct: pctOf(saved, goal.target), left: fmt(left) }) : t('savings.result.goalDone'),
-          t('savings.result.fundRemaining', { fund: fmt(current - amount) }),
+          source === 'fund'
+            ? t('savings.result.fundRemaining', { fund: fmt(current - amount) })
+            : source === 'free'
+              ? t('savings.result.freeRemaining', { free: fmt(free - amount) })
+              : srcGoal && t('savings.result.goalRemaining', { name: srcGoal.name, amount: fmt(srcGoal.saved - amount) }),
         ),
       });
     } else if (sheet === 'newGoal') {
       const name = nameInput.trim();
       const id = await insertGoal(db, name, amount);
-      if (start > 0) await contributeGoal(db, id, start, free);
+      if (start > 0) await contributeGoal(db, id, start);
       setResult({
         title: t('savings.result.goalCreated', { name }),
         text: joinMeta(
@@ -277,6 +403,23 @@ export default function Ahorro() {
     );
 
   const lockedGoals = goals.filter((g) => g.saved > 0);
+
+  // Una meta eliminada deja de ser filtro: se vuelve a todo el historial.
+  const hist = typeof histFilter === 'number' && !goals.some((g) => g.id === histFilter) ? 'all' : histFilter;
+  const histRows = historyRows(entries, hist, goalsById);
+  const histEmpty =
+    hist === 'all' ? t('savings.history.empty') : hist === 'free' ? t('savings.history.emptyFree') : t('savings.history.emptyGoal');
+
+  const sourceOptions = SOURCES.filter((s) => s !== 'goal' || otherGoals.length > 0).map((id) => ({
+    id,
+    label: t(`savings.sheet.sources.${id}`),
+    extra:
+      id === 'fund'
+        ? fmt(fund)
+        : id === 'free'
+          ? fmt(free)
+          : t('savings.sheet.goalsCount', { count: otherGoals.length }),
+  }));
 
   return (
     <View style={layout.screen}>
@@ -421,30 +564,40 @@ export default function Ahorro() {
           <T w={800} size={16}>
             {t('savings.history.title')}
           </T>
+          <View style={st.filters}>
+            <Chip label={t('savings.history.filters.all')} on={hist === 'all'} onPress={() => setHistFilter('all')} style={st.filter} />
+            <Chip label={t('savings.free')} on={hist === 'free'} onPress={() => setHistFilter('free')} style={st.filter} />
+            {goals.map((g) => (
+              <Chip
+                key={g.id}
+                label={g.name}
+                on={hist === g.id}
+                accent={goalColor(g.id)}
+                onPress={() => setHistFilter(g.id)}
+                numberOfLines={1}
+                style={st.filter}
+              />
+            ))}
+          </View>
           <Card style={common.listCard}>
-            {entries.length === 0 ? (
+            {histRows.length === 0 ? (
               <T size={13.5} color={C.muted} style={st.emptyHistory}>
-                {t('savings.history.empty')}
+                {histEmpty}
               </T>
             ) : (
-              entries.map((e, i) => (
-                <Row key={e.id} gap={12} style={[st.histRow, i > 0 && common.divider]}>
-                  <HistoryIcon entry={e} />
+              histRows.map((r, i) => (
+                <Row key={r.e.id} gap={12} style={[st.histRow, i > 0 && common.divider]}>
+                  <HistoryIcon entry={r.e} />
                   <Stack gap={2} style={layout.fill}>
                     <T w={700} size={15}>
-                      {t(`savings.history.${e.kind}`)}
+                      {r.title}
                     </T>
                     <T size={12.5} color={C.muted}>
-                      {joinMeta(
-                        shortDate(e.date),
-                        e.kind === 'goal'
-                          ? (goalsById.get(e.goal_id ?? -1)?.name ?? '')
-                          : t('savings.history.balance', { amount: fmt(e.after) }),
-                      )}
+                      {r.meta}
                     </T>
                   </Stack>
-                  <T w={800} size={15} tabular color={e.delta < 0 ? C.out : C.in}>
-                    {signed(e.delta)}
+                  <T w={800} size={15} tabular color={r.moved ? C.ink : r.value < 0 ? C.out : C.in}>
+                    {r.moved ? fmt(r.value) : signed(r.value)}
                   </T>
                 </Row>
               ))
@@ -481,8 +634,36 @@ export default function Ahorro() {
           </Stack>
         )}
 
+        {goal && (
+          <Stack gap={8}>
+            <Label text={t('savings.sheet.from')} help={t('savings.help.source')} />
+            <Segmented options={sourceOptions} value={source} onChange={setSource} />
+            {source === 'goal' && (
+              <View style={st.filters}>
+                {otherGoals.map((g) => (
+                  <Chip
+                    key={g.id}
+                    label={joinMeta(g.name, fmt(g.saved))}
+                    on={g.id === srcGoalId}
+                    accent={goalColor(g.id)}
+                    onPress={() => setSrcGoalId(g.id)}
+                    numberOfLines={1}
+                    style={st.filter}
+                  />
+                ))}
+              </View>
+            )}
+          </Stack>
+        )}
+
         <Stack gap={6}>
-          {sheet && <Label key={sheet} text={t(`savings.sheet.input.${sheet}`)} help={t(`savings.help.input.${sheet}`)} />}
+          {sheet && (
+            <Label
+              key={sheet}
+              text={t(`savings.sheet.input.${sheet}`)}
+              help={sheet === 'goal' ? t(`savings.help.goalFrom.${source}`) : t(`savings.help.input.${sheet}`)}
+            />
+          )}
           <View style={common.amountBox}>
             <AmountField size={40} value={dots(input)} onChangeText={(text) => setInput(cleanAmount(text))} color={C.inDark} />
           </View>
@@ -607,7 +788,7 @@ function HistoryIcon({ entry: e }: { entry: SavingsEntry }) {
       </View>
     );
   }
-  if (e.kind === 'withdraw') {
+  if (e.kind === 'withdraw' || e.kind === 'release') {
     return (
       <View style={[common.iconTile, st.histIconWithdraw]}>
         <IconMinus color={C.out} />

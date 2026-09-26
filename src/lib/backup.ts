@@ -3,7 +3,7 @@ import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { fillSavingsMovements } from '@/db/repo';
-import { FILL_FIXED_MOVEMENTS } from '@/db/schema';
+import { FILL_FIXED_MOVEMENTS, FILL_SAVINGS_SOURCE } from '@/db/schema';
 import { t } from '@/i18n';
 
 import { todayISO } from './dates';
@@ -237,6 +237,7 @@ async function restore(db: SQLiteDatabase, backup: Backup) {
       }
     }
     await db.execAsync(FILL_FIXED_MOVEMENTS);
+    await db.execAsync(FILL_SAVINGS_SOURCE);
     await fillSavingsMovements(db);
   });
 }

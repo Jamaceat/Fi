@@ -548,11 +548,34 @@ export const es = {
       withdraw: 'Retiro al fondo total',
       goal: 'Aporte a meta',
       balance: 'Libre {{amount}}',
+      emptyFree: 'Lo libre del ahorro aún no tiene registros.',
+      emptyGoal: 'Esta meta aún no tiene movimientos.',
+      filters: { all: 'Todo' },
+      goalTo: 'Aporte a {{name}}',
+      /** De dónde salió un aporte (vista Todo). */
+      from: {
+        fund: 'Desde el fondo total',
+        free: 'Desde lo libre',
+        goal: 'Desde {{name}}',
+      },
+      /** Aporte recibido (vista de una meta). */
+      in: {
+        fund: 'Aporte desde el fondo total',
+        free: 'Aporte desde lo libre',
+        goal: 'Recibido de {{name}}',
+      },
+      sentTo: 'Pasado a {{name}}',
+      goalBalance: 'Saldo {{amount}}',
+      release: 'Meta {{name}} eliminada',
+      releaseSelf: 'Meta eliminada',
+      releaseMeta: 'Lo apartado volvió al fondo total',
+      deletedGoal: '{{name}} (eliminada)',
     },
     deleteGoal: {
       title: '¿Eliminar la meta {{name}}?',
-      text: 'Se borra la meta y su progreso.',
-      textRefund: 'Se borran la meta, su progreso y los movimientos de sus aportes. Lo apartado ({{amount}}) vuelve al fondo total.',
+      text: 'La meta sale de tu lista.',
+      textRefund:
+        'La meta sale de tu lista. Lo apartado ({{amount}}) vuelve al fondo total como un ingreso; su historial se conserva.',
     },
     /** Movimiento confirmado que se crea al mover dinero entre el fondo total y el ahorro. */
     movement: {
@@ -560,6 +583,7 @@ export const es = {
       add: 'Pasado al ahorro',
       withdraw: 'Retiro del ahorro',
       goal: 'Aporte a {{name}}',
+      release: 'Meta {{name}} eliminada',
     },
     preview: {
       typeBalance: 'Escribe tu saldo para comparar',
@@ -575,6 +599,11 @@ export const es = {
       noFree: 'No tienes ahorro libre para retirar',
       newGoalBalance: 'Nuevo saldo · {{pct}}%',
       startAt: 'Empiezas en {{amount}} de',
+      noFreeForGoal: 'No tienes ahorro libre para aportar',
+      notEnoughFreeGoal: 'No tienes tanto libre en el ahorro',
+      noGoalBalance: '{{name}} no tiene saldo para pasar',
+      notEnoughGoal: '{{name}} solo tiene',
+      pickGoal: 'Elige la meta de la que sale el dinero',
     },
     result: {
       saved: 'Ahorraste {{amount}}',
@@ -586,6 +615,8 @@ export const es = {
       newTotal: 'Nuevo total: {{amount}}',
       fundLeft: 'Nuevo total: {{amount}} · Quedan {{fund}} en el fondo total',
       fundRemaining: 'Quedan {{fund}} en el fondo total',
+      freeRemaining: 'Libre en el ahorro: {{free}}',
+      goalRemaining: 'A {{name}} le quedan {{amount}}',
       withdrew: 'Retiraste {{amount}}',
       withdrewText: 'Pasó al fondo total · Libre en el ahorro: {{free}}',
       contributed: 'Aportaste {{amount}} a {{name}}',
@@ -627,7 +658,17 @@ export const es = {
       recordedOn: 'Registrado el {{date}}',
       fundAvailable: 'Disponible en el fondo total: {{amount}}',
       fundShort: 'Fondo: {{amount}}',
+      freeShort: 'Libre: {{amount}}',
+      goalShort: '{{name}}: {{amount}}',
       fundTotal: 'Disponible en el fondo total',
+      from: '¿De dónde sale el dinero?',
+      sources: {
+        fund: 'Fondo total',
+        free: 'Libre',
+        goal: 'Otra meta',
+      },
+      goalsCount_one: '{{count}} meta',
+      goalsCount_other: '{{count}} metas',
       useAll: 'Todo',
       startNow: 'Aportar ahora',
       startLabel: 'Aporte inicial',
@@ -648,6 +689,14 @@ export const es = {
           'El objetivo: el valor total que quieres reunir. No es un aporte ni sale del fondo; con él se calcula tu progreso y cuánto te falta.',
       },
       goalName: 'Un nombre corto para reconocer la meta en tu lista, por ejemplo "Viaje". Máximo 40 caracteres.',
+      source:
+        'Fondo total: dinero nuevo que entra al ahorro (queda como gasto en tus movimientos). Libre: lo que ya tienes ahorrado sin meta. Otra meta: pasa dinero de una meta a esta; a la otra se le resta. Cada una guarda sus propios registros.',
+      /** Ayuda del monto al aportar a una meta, según de dónde sale. */
+      goalFrom: {
+        fund: 'Lo que apartas para esta meta; se suma a ella y a tu ahorro total, y se resta del fondo total. Queda bloqueado: no se puede retirar mientras la meta exista. No puedes aportar más de lo que tienes en el fondo. Los botones de abajo suman montos rápidos al valor escrito.',
+        free: 'Lo que pasas de lo libre del ahorro a esta meta. Tu ahorro total no cambia: se resta de lo libre y queda bloqueado en la meta. No puedes pasar más de lo libre.',
+        goal: 'Lo que pasas de la otra meta a esta. Tu ahorro total no cambia: se resta de la otra meta y se suma a esta, y las dos lo registran en su historial. No puedes pasar más de lo que tiene la otra meta.',
+      },
     },
   },
 
@@ -1065,6 +1114,12 @@ export const es = {
     savingsUpdate: 'actualizacion',
     savingsWithdraw: 'retiro',
     savingsGoal: 'aporte a meta',
+    savingsRelease: 'meta eliminada',
+    savingsFrom: {
+      fund: 'desde fondo total',
+      free: 'desde libre',
+      goal: 'desde meta {{name}}',
+    },
     balance: 'saldo {{amount}}',
     target: 'objetivo {{amount}}',
   },

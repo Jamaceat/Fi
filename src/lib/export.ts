@@ -75,22 +75,30 @@ export async function exportCsv(db: SQLiteDatabase) {
     update: t('export.savingsUpdate'),
     withdraw: t('export.savingsWithdraw'),
     goal: t('export.savingsGoal'),
+    release: t('export.savingsRelease'),
   };
   for (const e of [...savings].reverse()) {
+    const from =
+      e.kind !== 'goal' || !e.source
+        ? ''
+        : e.source === 'goal'
+          ? t('export.savingsFrom.goal', { name: goalName.get(e.from_goal_id ?? -1) ?? '' })
+          : t(`export.savingsFrom.${e.source}`);
     rows.push(
       line([
         t('export.records.savings'),
         e.date,
         savingsKind[e.kind],
         e.goal_id != null ? (goalName.get(e.goal_id) ?? '') : '',
-        '',
-        e.delta,
+        from,
+        // Aportes y metas eliminadas: lo que se movió (desde lo libre u otra meta el delta es 0).
+        e.kind === 'goal' || e.kind === 'release' ? e.amount : e.delta,
         t('export.balance', { amount: e.after }),
         '',
       ]),
     );
   }
-  for (const g of goals) {
+  for (const g of goals.filter((x) => !x.deleted_at)) {
     rows.push(line([t('export.records.goal'), g.last_date ?? '', '', g.name, '', g.saved, t('export.target', { amount: g.target }), '']));
   }
 

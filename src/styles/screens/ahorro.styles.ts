@@ -24,6 +24,9 @@ export const styles = StyleSheet.create({
   },
   goal: { backgroundColor: C.card, borderWidth: 1, borderColor: C.line, borderRadius: 18, padding: 16, gap: 14 },
   contribute: { height: 40, paddingHorizontal: 16, borderRadius: 12, backgroundColor: C.in, justifyContent: 'center' },
+  /** Filtros del historial y metas de origen de un aporte. */
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filter: { height: 36, paddingHorizontal: 14, maxWidth: '100%' },
   emptyHistory: { paddingVertical: 16, textAlign: 'center' },
   histRow: { paddingVertical: 12 },
   histIconAdd: { backgroundColor: C.in },
