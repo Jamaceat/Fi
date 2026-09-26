@@ -8,6 +8,9 @@ export const styles = StyleSheet.create({
   amountLabel: { alignItems: 'center' },
   freq: { flex: 1, minHeight: 72, padding: 14, borderRadius: 16, backgroundColor: C.card, gap: 4, borderWidth: 1, borderColor: C.line },
   freqOn: { borderWidth: 2 },
+  /** Fondo de cada frecuencia y borde de color que se desliza hasta la elegida. */
+  freqPlate: { borderRadius: 16, borderWidth: 1, backgroundColor: C.card, borderColor: C.line },
+  freqRing: { borderRadius: 16, borderWidth: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   cat: {
     width: '31.5%',

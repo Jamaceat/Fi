@@ -29,6 +29,8 @@ import {
   Tap,
   Toast,
 } from '@/components/ui';
+import { clearOption, useSlidingHighlight } from '@/components/sliding-highlight';
+import { UnitBar } from '@/components/unit-bar';
 import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
 import { t } from '@/i18n';
@@ -36,7 +38,7 @@ import { authenticate, canLock } from '@/lib/auth';
 import { clampDay, fromISO, fullDate, lastDayOfMonth, longDate, realTodayISO, todayISO, toISO } from '@/lib/dates';
 import { pickBackup, shareBackup, type Backup } from '@/lib/backup';
 import { exportCsv } from '@/lib/export';
-import { describePreset, presetName, PRESETS, unitLabel, UNITS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
+import { describePreset, presetName, PRESETS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
 import { common, layout } from '@/styles/common';
 import { styles as st } from '@/styles/screens/ajustes.styles';
@@ -55,6 +57,8 @@ const HOURS = [
   ['12:00', 'noon'],
   ['19:00', 'evening'],
 ] as const;
+
+const HOUR_IDS = HOURS.map(([id]) => id);
 
 const KINDS: Kind[] = ['gasto', 'ingreso'];
 
@@ -87,6 +91,7 @@ export default function Ajustes() {
   const [wiping, setWiping] = useState(false);
   const [wipeText, setWipeText] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
+  const hourHl = useSlidingHighlight({ keys: HOUR_IDS, selected: s.hour, color: C.inSoft, border: C.in });
 
   const setDef = (kind: Kind, patch: Partial<DefaultPeriod>) =>
     updateSettings({ defs: { ...s.defs, [kind]: { ...s.defs[kind], ...patch } } });
@@ -287,22 +292,12 @@ export default function Ajustes() {
                               incLabel={t('fixedForm.intervalIncrease')}
                             />
                           </Row>
-                          <Row gap={4} style={st.units}>
-                            {UNITS.map((u) => {
-                              const sel = u === d.unit;
-                              return (
-                                <Tap
-                                  key={u}
-                                  onPress={() => setDef(kind, { unit: u, preset: 'custom' })}
-                                  accessibilityState={{ selected: sel }}
-                                  style={[st.unit, sel && (custom ? { backgroundColor: accent } : st.unitOn)]}>
-                                  <T w={800} size={13} color={sel ? (custom ? C.white : C.ink) : C.muted2}>
-                                    {unitLabel(u)}
-                                  </T>
-                                </Tap>
-                              );
-                            })}
-                          </Row>
+                          <UnitBar
+                            value={d.unit}
+                            onChange={(u) => setDef(kind, { unit: u, preset: 'custom' })}
+                            active={custom}
+                            accent={accent}
+                          />
                         </View>
                       </View>
                     )}
@@ -452,15 +447,17 @@ export default function Ajustes() {
             <View style={[common.divider, st.radioGroup]}>
               <Label text={t('settings.alerts.hour')} help={t('settings.help.hour')} w={700} size={14.5} />
               <Row gap={8}>
+                {hourHl.layer({ base: [st.hourPlate, st.radioOff], style: st.hourPlate })}
                 {HOURS.map(([id, key]) => {
                   const sel = s.hour === id;
                   return (
                     <Tap
                       key={id}
                       onPress={() => updateSettings({ hour: id })}
+                      onLayout={hourHl.measure(id)}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: sel }}
-                      style={[st.hour, sel ? st.radioOn : st.radioOff]}>
+                      style={[st.hour, hourHl.ready ? clearOption : sel ? st.radioOn : st.radioOff]}>
                       <T w={700} size={13} color={sel ? C.inDark : C.ink}>
                         {t(`settings.alerts.hours.${key}`)}
                       </T>

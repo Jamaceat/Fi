@@ -26,10 +26,11 @@ export const styles = StyleSheet.create({
   customBox: { padding: 14, gap: 12 },
   customBoxOff: { backgroundColor: C.panelOff },
   customHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  units: { backgroundColor: C.segBg, borderRadius: 12, padding: 4 },
-  unit: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  unitOn: { backgroundColor: C.card },
   wd: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  /** Formas de los días y las categorías, para su fondo y el que se desliza. */
+  wdPlate: { borderRadius: 12, borderWidth: 1 },
+  catPlate: { borderRadius: 20, borderWidth: 1 },
+  plateOff: { backgroundColor: C.card, borderColor: C.line },
   stepRow: { paddingVertical: 10, gap: 12 },
   /** Selector de día desplegado bajo la periodicidad elegida. */
   dayPanelWrap: { paddingHorizontal: 14, paddingBottom: 14 },

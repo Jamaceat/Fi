@@ -15,9 +15,6 @@ export const styles = StyleSheet.create({
   opt: { height: 40, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, justifyContent: 'center' },
   customPanel: { gap: 10 },
   customPanelOff: { opacity: 0.7 },
-  units: { backgroundColor: C.segBg, borderRadius: 12, padding: 4 },
-  unit: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  unitOn: { backgroundColor: C.card },
   settingRow: { paddingVertical: 12 },
   settingRowCompact: { paddingVertical: 10 },
   radioGroup: { paddingVertical: 12, gap: 8 },
@@ -39,4 +36,6 @@ export const styles = StyleSheet.create({
   radioOn: { backgroundColor: C.inSoft, borderColor: C.in },
   radioOff: { backgroundColor: C.card, borderColor: C.line },
   hour: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  /** Forma de cada hora, para su fondo y el que se desliza. */
+  hourPlate: { borderRadius: 12, borderWidth: 1 },
 });

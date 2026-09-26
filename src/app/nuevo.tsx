@@ -7,6 +7,7 @@ import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { DatePicker } from '@/components/calendar';
 import { draftValues, FixedForm, kindPatch, newFixedDraft, type FixedDraft } from '@/components/fixed-form';
 import { IconCalendar, IconChevronLeft, IconClose, IconTrash } from '@/components/icons';
+import { clearOption, useSlidingHighlight } from '@/components/sliding-highlight';
 import { StepIndicator } from '@/components/step-indicator';
 import {
   AmountField,
@@ -93,6 +94,7 @@ export default function Nuevo() {
 
   const g = tipo === 'gasto';
   const accent = g ? C.out : C.in;
+  const freqHl = useSlidingHighlight({ keys: FREQS, selected: freq, color: 'transparent', border: accent });
   const linked = editing?.fixed_id != null;
   const kindCats = categoriesOf(tipo);
   const cats = kindCats.includes(cat) ? kindCats : [...kindCats, cat];
@@ -232,14 +234,16 @@ export default function Nuevo() {
     <Stack gap={10}>
       <Label text={t('newMovement.frequency')} help={t('newMovement.help.frequency')} />
       <Row gap={10}>
+        {freqHl.layer({ base: st.freqPlate, style: st.freqRing })}
         {FREQS.map((fid) => {
           const on = freq === fid;
           return (
             <Tap
               key={fid}
               onPress={() => pickFreq(fid)}
+              onLayout={freqHl.measure(fid)}
               accessibilityState={{ selected: on }}
-              style={[st.freq, on && [st.freqOn, { borderColor: accent }]]}>
+              style={[st.freq, freqHl.ready ? clearOption : on && [st.freqOn, { borderColor: accent }]]}>
               <T w={800} size={14.5}>
                 {t(`newMovement.freq.${fid}.title`)}
               </T>

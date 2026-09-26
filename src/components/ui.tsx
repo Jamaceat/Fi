@@ -33,6 +33,7 @@ import { initial } from '@/lib/format';
 import { common, layout } from '@/styles/common';
 
 import { IconCheck, IconChevronLeft, IconClose, IconInfo } from './icons';
+import { useSlidingHighlight } from './sliding-highlight';
 import { useKeyboardHeight } from './use-keyboard-height';
 import { styles as s } from './ui.styles';
 
@@ -318,7 +319,10 @@ export function LinkText({ children, onPress }: { children: ReactNode; onPress: 
 
 export type SegOption<K extends string> = { id: K; label: string; extra?: string; activeFg?: string; activeBg?: string };
 
-/** Selector de dos o más opciones sobre fondo gris (diseño: tabs Gastos/Ingresos). */
+/**
+ * Selector de dos o más opciones sobre fondo gris (diseño: tabs Gastos/Ingresos).
+ * El fondo de la opción elegida se desliza hasta la nueva al cambiar.
+ */
 export function Segmented<K extends string>({
   options,
   value,
@@ -328,17 +332,25 @@ export function Segmented<K extends string>({
   value: K;
   onChange: (k: K) => void;
 }) {
+  const hl = useSlidingHighlight({
+    keys: options.map((o) => o.id),
+    selected: value,
+    color: options.find((o) => o.id === value)?.activeBg ?? C.card,
+  });
+
   return (
     <View style={s.segWrap}>
+      {hl.layer({ style: [s.segOn, s.segIndicator] })}
       {options.map((o) => {
         const on = o.id === value;
         return (
           <Tap
             key={o.id}
             onPress={() => onChange(o.id)}
+            onLayout={hl.measure(o.id)}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            style={[s.segBtn, on && (o.activeBg ? { backgroundColor: o.activeBg } : s.segOn)]}>
+            style={[s.segBtn, on && !hl.ready && (o.activeBg ? { backgroundColor: o.activeBg } : s.segOn)]}>
             <T w={800} size={14.5} color={on ? (o.activeFg ?? C.ink) : C.muted2}>
               {o.label}
             </T>

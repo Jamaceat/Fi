@@ -20,6 +20,9 @@ export const C = {
   dashedDark: '#C9C2B6',
   handle: '#D3CDC2',
   panelOff: '#FAF8F4',
+  /** Fondo de un texto mientras carga, y el brillo que lo recorre. */
+  loading: '#EAE4DA',
+  loadingShine: '#FFFFFF',
   shadow: '#000000',
   backdrop: 'rgba(27,26,23,0.42)',
   backdropDark: 'rgba(0,0,0,0.45)',

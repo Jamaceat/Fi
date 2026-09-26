@@ -40,6 +40,8 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
+  /** Fondo que se desliza bajo la opción elegida. */
+  segIndicator: { borderRadius: 12 },
 
   chip: { height: 44, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1, justifyContent: 'center' },
   progressTrack: { borderRadius: 99, overflow: 'hidden' },

@@ -15,8 +15,6 @@ import {
   presetDesc,
   presetName,
   PRESETS,
-  unitLabel,
-  UNITS,
   unitWord,
   type Kind,
   type Preset,
@@ -27,6 +25,8 @@ import { useApp } from '@/state/app';
 import { common, layout } from '@/styles/common';
 
 import { styles as st } from './fixed-form.styles';
+import { clearOption, useSlidingHighlight } from './sliding-highlight';
+import { UnitBar } from './unit-bar';
 
 /** Categorías sugeridas para un fijo del tipo dado. */
 export const fixedCategories = (kind: Kind) => tList(`categories.fixed.${kind}`);
@@ -239,6 +239,7 @@ export function FixedForm({
   const upcoming = nextOccurrences(schedule, today, 3, settings.holiday, holidays);
   const categories = fixedCategories(kind);
   const cats = categories.includes(d.category) ? categories : [...categories, d.category];
+  const catHl = useSlidingHighlight({ keys: cats, selected: d.category, color: accent });
   const heroSub = isGasto ? C.heroSub : C.inSub;
   const heroTile = [st.heroTile, isGasto ? st.heroTileOut : st.heroTileIn];
   const upcomingFg = isGasto ? C.outPanelText : C.inDark;
@@ -291,23 +292,7 @@ export function FixedForm({
     <Animated.View key={`${d.preset}-${weekly}`} entering={FadeInDown.duration(SLIDE_MS)} style={st.dayPanel}>
       <Label text={dayQuestion} help={dayHelp} size={13.5} />
       {weekly ? (
-        <Row gap={6}>
-          {weekdayInitials().map((l, i) => {
-            const sel = i === d.weekday;
-            return (
-              <Tap
-                key={i}
-                accessibilityLabel={weekdayName(i)}
-                accessibilityState={{ selected: sel }}
-                onPress={() => set({ weekday: i })}
-                style={[st.wd, { backgroundColor: sel ? accent : C.card, borderColor: sel ? accent : C.line }]}>
-                <T w={800} size={14} color={sel ? C.white : C.ink}>
-                  {l}
-                </T>
-              </Tap>
-            );
-          })}
-        </Row>
+        <WeekdayBar value={d.weekday} onChange={(i) => set({ weekday: i })} accent={accent} />
       ) : (
         <>
           <View style={[common.box, common.boxPadded]}>{dayStepper}</View>
@@ -382,14 +367,19 @@ export function FixedForm({
             <Stack gap={6}>
               <Label text={t('fixedForm.category')} help={t('fixedForm.help.category')} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.catList}>
+                {catHl.layer({ base: [st.catPlate, st.plateOff], style: st.catPlate })}
                 {cats.map((c) => {
                   const on = c === d.category;
                   return (
                     <Tap
                       key={c}
                       onPress={() => set({ category: c })}
+                      onLayout={catHl.measure(c)}
                       accessibilityState={{ selected: on }}
-                      style={[st.catChip, { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line }]}>
+                      style={[
+                        st.catChip,
+                        catHl.ready ? clearOption : { backgroundColor: on ? accent : C.card, borderColor: on ? accent : C.line },
+                      ]}>
                       <T w={700} size={13} color={on ? C.white : C.ink}>
                         {c}
                       </T>
@@ -477,22 +467,12 @@ export function FixedForm({
                 incLabel={t('fixedForm.intervalIncrease')}
               />
             </Row>
-            <Row gap={4} style={st.units}>
-              {UNITS.map((u) => {
-                const sel = u === d.customUnit;
-                return (
-                  <Tap
-                    key={u}
-                    onPress={() => set({ customUnit: u, preset: 'custom' })}
-                    accessibilityState={{ selected: sel }}
-                    style={[st.unit, sel && (isCustom ? { backgroundColor: accent } : st.unitOn)]}>
-                    <T w={800} size={13} color={sel && isCustom ? C.white : sel ? C.ink : C.muted2}>
-                      {unitLabel(u)}
-                    </T>
-                  </Tap>
-                );
-              })}
-            </Row>
+            <UnitBar
+              value={d.customUnit}
+              onChange={(u) => set({ customUnit: u, preset: 'custom' })}
+              active={isCustom}
+              accent={accent}
+            />
             <T w={600} size={12.5} color={C.muted}>
               {isCustom ? t('fixedForm.repeats', every) : t('fixedForm.tapToUse', every)}
             </T>
@@ -613,5 +593,33 @@ export function FixedForm({
         </Stack>
       )}
     </>
+  );
+}
+
+const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
+
+/** Fila de días de la semana (L M M J V S D) para los fijos semanales. */
+function WeekdayBar({ value, onChange, accent }: { value: number; onChange: (i: number) => void; accent: string }) {
+  const hl = useSlidingHighlight({ keys: WEEKDAYS, selected: value, color: accent });
+  return (
+    <Row gap={6}>
+      {hl.layer({ base: [st.wdPlate, st.plateOff], style: st.wdPlate })}
+      {weekdayInitials().map((l, i) => {
+        const sel = i === value;
+        return (
+          <Tap
+            key={i}
+            accessibilityLabel={weekdayName(i)}
+            accessibilityState={{ selected: sel }}
+            onPress={() => onChange(i)}
+            onLayout={hl.measure(i)}
+            style={[st.wd, hl.ready ? clearOption : { backgroundColor: sel ? accent : C.card, borderColor: sel ? accent : C.line }]}>
+            <T w={800} size={14} color={sel ? C.white : C.ink}>
+              {l}
+            </T>
+          </Tap>
+        );
+      })}
+    </Row>
   );
 }

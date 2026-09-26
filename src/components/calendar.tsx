@@ -18,6 +18,7 @@ import {
   weekdayInitials,
   weekdayName,
   weekdayOf,
+  type Period,
 } from '@/lib/dates';
 import type { HolidayMap } from '@/lib/holidays';
 import { useApp, useLoad } from '@/state/app';
@@ -393,17 +394,18 @@ export const cellsRange = (year: number, month: number) => {
   return { from: cells[0], to: addDays(cells[41], 1) };
 };
 
-export function CalendarCard() {
-  const { period, settings, holidays, needHolidays } = useApp();
+/**
+ * Tarjeta del calendario de Inicio. Recibe los días ya cargados (con `loadDays` sobre
+ * `cellsRange`) para mostrarse completa desde el primer cuadro al cambiar de mes.
+ */
+export function CalendarCard({ period, days }: { period: Period; days: Days }) {
+  const { holidays, needHolidays } = useApp();
   const [filter, setFilter] = useState<CalFilter>('todos');
   const { year, month } = period;
-  const { from, to } = cellsRange(year, month);
 
   useEffect(() => {
     needHolidays([year]);
   }, [year, needHolidays]);
-
-  const days = useLoad((db) => loadDays(db, from, to, settings.holiday, holidays), [from, to, settings.holiday]);
 
   const today = todayISO();
   const next = nextHoliday(holidays, today);
