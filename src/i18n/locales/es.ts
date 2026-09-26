@@ -845,6 +845,11 @@ export const es = {
       reorder: 'Cambiar orden de los bloques',
       reorderText: 'Arrastra balance, ahorro, calendario y más en una maqueta.',
     },
+    forms: {
+      title: 'Formularios',
+      stickyFooter: 'Botón siempre sobre el teclado',
+      stickyFooterText: 'Si lo apagas, aparece al bajar hasta el final.',
+    },
     backup: {
       title: 'Respaldo automático',
       text: 'Guarda una copia de todos tus datos en el teléfono (CSV). Si la app abre sin datos, se recuperan de aquí. Expórtala para no perderla si desinstalas la app.',
@@ -931,6 +936,8 @@ export const es = {
       hour: 'La hora a la que llegan los recordatorios y el resumen semanal.',
       hideAmounts: 'Oculta los valores en la pantalla de Inicio por si alguien ve tu teléfono. Toca el saldo para mostrarlos.',
       lock: 'Pide la huella, el rostro o el PIN del teléfono cada vez que abres la app. Debe estar configurado en el teléfono.',
+      stickyFooter:
+        'Mientras escribes, el botón de Siguiente o Guardar se queda justo encima del teclado. Apagado, queda al final del formulario y lo ves al bajar del todo.',
       backupEvery:
         'Cada cuánto se actualiza la copia automática guardada en el teléfono. Se hace al usar la app, cuando ya pasó este tiempo.',
     },

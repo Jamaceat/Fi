@@ -100,6 +100,8 @@ export type Settings = {
   lock: boolean;
   /** Orden de los bloques en Inicio. */
   homeOrder: HomeBlock[];
+  /** Con el teclado abierto, el botón de guardar/siguiente queda siempre encima de él. */
+  stickyFooter: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -119,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideAmounts: false,
   lock: false,
   homeOrder: [...HOME_BLOCKS],
+  stickyFooter: true,
 };
 
 // ——— Ajustes ———

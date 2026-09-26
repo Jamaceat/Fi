@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   draftFromFixed,
@@ -28,7 +27,6 @@ import { styles as st } from '@/styles/screens/fijo-editar.styles';
 
 export default function EditarFijo() {
   const db = useSQLiteContext();
-  const insets = useSafeAreaInsets();
   const { settings, currentPeriod, bump } = useApp();
   const { id, kind: kindParam } = useLocalSearchParams<{ id: string; kind?: string }>();
   const isNew = id === 'nuevo';
@@ -74,9 +72,28 @@ export default function EditarFijo() {
     router.back();
   };
 
+  const footer = (
+    <Row gap={10}>
+      <Tap onPress={() => router.back()} style={st.cancel}>
+        <T w={800} size={15}>
+          {t('common.cancel')}
+        </T>
+      </Tap>
+      <View style={st.save}>
+        <PrimaryButton
+          label={isNew ? t('fixedEdit.create') : t('common.saveChanges')}
+          bg={accent}
+          disabled={cantSave}
+          onPress={save}
+          icon={false}
+        />
+      </View>
+    </Row>
+  );
+
   return (
     <View style={layout.screen}>
-      <Screen bottom={130}>
+      <Screen bottom={130} footer={footer} stickyFooter={settings.stickyFooter}>
         <Header
           onBack={() => router.back()}
           kicker={t(`fixedEdit.kicker.${d.kind}`)}
@@ -138,23 +155,6 @@ export default function EditarFijo() {
           </T>
         )}
       </Screen>
-
-      <Row gap={10} style={[common.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Tap onPress={() => router.back()} style={st.cancel}>
-          <T w={800} size={15}>
-            {t('common.cancel')}
-          </T>
-        </Tap>
-        <View style={st.save}>
-          <PrimaryButton
-            label={isNew ? t('fixedEdit.create') : t('common.saveChanges')}
-            bg={accent}
-            disabled={cantSave}
-            onPress={save}
-            icon={false}
-          />
-        </View>
-      </Row>
     </View>
   );
 }

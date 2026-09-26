@@ -30,7 +30,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { C, F, type Weight } from '@/constants/theme';
 import { t } from '@/i18n';
 import { initial } from '@/lib/format';
-import { layout } from '@/styles/common';
+import { common, layout } from '@/styles/common';
 
 import { IconCheck, IconChevronLeft, IconClose, IconInfo } from './icons';
 import { useKeyboardHeight } from './use-keyboard-height';
@@ -109,16 +109,29 @@ export function Screen({
   children,
   bottom = 112,
   gap = 18,
+  footer,
+  stickyFooter = true,
 }: {
   children: ReactNode;
   /** Espacio al final; también se descuenta al centrar, porque ahí suele ir la barra inferior. */
   bottom?: number;
   gap?: number;
+  /** Barra fija al fondo (botones de guardar, siguiente…). `bottom` debe dejarle espacio. */
+  footer?: ReactNode;
+  /**
+   * Con el teclado abierto: `true` deja el footer siempre encima del teclado;
+   * `false` lo muestra solo al llegar al final del scroll, como parte del contenido.
+   */
+  stickyFooter?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
   const content = useRef<View>(null);
   const viewHeight = useRef(0);
+  // Copias para el hilo de UI: el footer no fijo se mueve con el scroll.
+  const scrollY = useSharedValue(0);
+  const viewH = useSharedValue(0);
+  const contentH = useSharedValue(0);
 
   const scrollIntoView = useCallback<ScrollIntoView>(
     (node) => {
@@ -140,8 +153,16 @@ export function Screen({
 
   // El teclado le quita espacio a la pantalla; si tapa el campo enfocado, se sube hasta él.
   const keyboard = useKeyboardHeight();
-  const scrollY = useRef(0);
   const wrapStyle = useAnimatedStyle(() => ({ paddingBottom: keyboard.get() }));
+  const footerStyle = useAnimatedStyle(() => {
+    const kb = keyboard.get();
+    // No fijo: sale de detrás del teclado a medida que se acerca el final del scroll.
+    const toEnd = Math.min(kb, Math.max(0, contentH.get() - viewH.get() - scrollY.get()));
+    return {
+      bottom: stickyFooter ? kb : kb - toEnd,
+      paddingBottom: 16 + Math.max(0, insets.bottom - kb),
+    };
+  });
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const sub = Keyboard.addListener('keyboardDidShow', () => {
@@ -154,10 +175,11 @@ export function Screen({
         input.measureLayout(
           inner,
           (_x, y, _w, h) => {
-            const top = scrollY.current + insets.top + 16;
-            const end = scrollY.current + viewHeight.current - 24;
+            const top = scrollY.get() + insets.top + 16;
+            // `bottom` reserva el alto del footer, que puede quedar sobre el teclado.
+            const end = scrollY.get() + viewHeight.current - bottom;
             if (y >= top && y + h <= end) return;
-            sv.scrollTo({ y: Math.max(0, y + h + 24 - viewHeight.current), animated: true });
+            sv.scrollTo({ y: Math.max(0, y + h + bottom - viewHeight.current), animated: true });
           },
           // El campo no está en esta pantalla (p. ej. dentro de un Sheet).
           () => {},
@@ -168,7 +190,7 @@ export function Screen({
       clearTimeout(timer);
       sub.remove();
     };
-  }, [insets.top]);
+  }, [bottom, insets.top, scrollY]);
 
   return (
     <ScreenScroll.Provider value={scrollIntoView}>
@@ -179,12 +201,17 @@ export function Screen({
           innerViewRef={content as RefObject<View>}
           style={layout.fill}
           contentContainerStyle={[s.screenContent, { paddingTop: insets.top + 16, paddingBottom: bottom, gap }]}
-          onLayout={(e) => (viewHeight.current = e.nativeEvent.layout.height)}
-          onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
-          scrollEventThrottle={32}
+          onLayout={(e) => {
+            viewHeight.current = e.nativeEvent.layout.height;
+            viewH.set(viewHeight.current);
+          }}
+          onContentSizeChange={(_w, h) => contentH.set(h)}
+          onScroll={(e) => scrollY.set(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
+        {footer && <Animated.View style={[common.footer, footerStyle]}>{footer}</Animated.View>}
       </Animated.View>
     </ScreenScroll.Provider>
   );
@@ -659,7 +686,7 @@ export function Sheet({
   const wrapStyle = useAnimatedStyle(() => ({ paddingBottom: keyboard.get() }));
   const sheetStyle = useAnimatedStyle(() => ({
     maxHeight: (height - keyboard.get()) * 0.85,
-    paddingBottom: keyboard.get() > 0 ? 24 : insets.bottom + 24,
+    paddingBottom: 24 + Math.max(0, insets.bottom - keyboard.get()),
     transform: [{ translateY: (1 - slide.get()) * height }],
   }));
 

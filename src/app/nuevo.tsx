@@ -3,7 +3,6 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, BackHandler, View } from 'react-native';
 import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePicker } from '@/components/calendar';
 import { draftValues, FixedForm, kindPatch, newFixedDraft, type FixedDraft } from '@/components/fixed-form';
@@ -53,7 +52,6 @@ const defaultCategory = (kind: Kind) => t(`categories.movementDefault.${kind}`);
 
 export default function Nuevo() {
   const db = useSQLiteContext();
-  const insets = useSafeAreaInsets();
   const { settings, bump } = useApp();
   // `date` y `kind` preseleccionan un movimiento nuevo (p. ej. desde el calendario).
   const { id, date: dateParam, kind } = useLocalSearchParams<{ id?: string; date?: string; kind?: string }>();
@@ -367,10 +365,47 @@ export default function Nuevo() {
 
   const canNext = n > 0 && !saving;
 
+  const footer = wizard ? (
+    <Row gap={10}>
+      {step > 0 && (
+        <Tap
+          onPress={() => goTo(step - 1)}
+          accessibilityRole="button"
+          accessibilityLabel={t('newMovement.prev')}
+          style={[common.outlineBtn, st.backBtn]}>
+          <IconChevronLeft size={18} />
+          <T w={800} size={15}>
+            {t('newMovement.prev')}
+          </T>
+        </Tap>
+      )}
+      <View style={layout.fill}>
+        {isLast ? (
+          <PrimaryButton label={saveLabel} bg={accent} disabled={!canNext} onPress={save} />
+        ) : (
+          <PrimaryButton
+            label={t('newMovement.next')}
+            bg={accent}
+            icon={false}
+            disabled={!canNext}
+            onPress={() => goTo(step + 1)}
+          />
+        )}
+      </View>
+    </Row>
+  ) : (
+    <PrimaryButton label={saveLabel} bg={accent} disabled={!canNext} onPress={save} />
+  );
+
   return (
     <View style={layout.screen}>
       {/* Con `key` cada paso arranca con el scroll arriba. */}
-      <Screen key={wizard ? stepId : 'edit'} bottom={140} gap={20}>
+      <Screen
+        key={wizard ? stepId : 'edit'}
+        bottom={140}
+        gap={20}
+        footer={footer}
+        stickyFooter={settings.stickyFooter}>
         <Row style={layout.between}>
           <RoundButton label={t('common.close')} onPress={() => router.back()}>
             <IconClose />
@@ -411,40 +446,6 @@ export default function Nuevo() {
           </>
         )}
       </Screen>
-
-      <View style={[common.footer, { paddingBottom: insets.bottom + 16 }]}>
-        {wizard ? (
-          <Row gap={10}>
-            {step > 0 && (
-              <Tap
-                onPress={() => goTo(step - 1)}
-                accessibilityRole="button"
-                accessibilityLabel={t('newMovement.prev')}
-                style={[common.outlineBtn, st.backBtn]}>
-                <IconChevronLeft size={18} />
-                <T w={800} size={15}>
-                  {t('newMovement.prev')}
-                </T>
-              </Tap>
-            )}
-            <View style={layout.fill}>
-              {isLast ? (
-                <PrimaryButton label={saveLabel} bg={accent} disabled={!canNext} onPress={save} />
-              ) : (
-                <PrimaryButton
-                  label={t('newMovement.next')}
-                  bg={accent}
-                  icon={false}
-                  disabled={!canNext}
-                  onPress={() => goTo(step + 1)}
-                />
-              )}
-            </View>
-          </Row>
-        ) : (
-          <PrimaryButton label={saveLabel} bg={accent} disabled={!canNext} onPress={save} />
-        )}
-      </View>
 
       <Sheet visible={dateOpen} onClose={() => setDateOpen(false)} title={t('newMovement.date')}>
         <DatePicker value={date} onChange={pickDate} filter={tipo} />

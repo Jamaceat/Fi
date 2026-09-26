@@ -498,6 +498,22 @@ export default function Ajustes() {
       </Stack>
 
       <Stack gap={10}>
+        <T w={800} size={16}>
+          {t('settings.forms.title')}
+        </T>
+        <View style={[common.box, common.boxPadded]}>
+          <SwitchRow
+            first
+            label={t('settings.forms.stickyFooter')}
+            desc={t('settings.forms.stickyFooterText')}
+            help={t('settings.help.stickyFooter')}
+            on={s.stickyFooter}
+            onPress={() => toggle('stickyFooter')}
+          />
+        </View>
+      </Stack>
+
+      <Stack gap={10}>
         <Stack gap={4}>
           <T w={800} size={16}>
             {t('settings.backup.title')}
