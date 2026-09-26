@@ -7,7 +7,7 @@ import { C } from '@/constants/theme';
 import { listMovements, loadFixedData, type Settings } from '@/db/repo';
 import { t } from '@/i18n';
 
-import { addDays, diffDays, fromISO, realTodayISO, shortDate, weekdayName, weekdayOf } from './dates';
+import { addDays, diffDays, fromISO, getClockOffset, nowDate, shortDate, todayISO, weekdayName, weekdayOf } from './dates';
 import { fixedItems, sum } from './finance';
 import { APPROX, fmt, MASKED_AMOUNT } from './format';
 import type { HolidayMap } from './holidays';
@@ -157,8 +157,8 @@ const whenText = (date: string, from: string) => {
 };
 
 async function plan(db: SQLiteDatabase, s: Settings, holidays: HolidayMap): Promise<Planned[]> {
-  const now = new Date();
-  const today = realTodayISO();
+  const now = nowDate();
+  const today = todayISO();
   const money = (n: number, approx = false) => (s.hideAmounts ? MASKED_AMOUNT : (approx ? APPROX : '') + fmt(n));
   const fixedData = await loadFixedData(db);
   const planned: Planned[] = [];
@@ -213,10 +213,12 @@ async function reschedule(db: SQLiteDatabase, s: Settings, holidays: HolidayMap)
   await Notifications.cancelAllScheduledNotificationsAsync();
   if (!s.remindFijos && !s.weekly) return;
   if (!(await notificationsAllowed(true))) return;
+  // `at` va en la hora de la app; el teléfono dispara con la real (difieren con el reloj simulado).
+  const offset = getClockOffset();
   for (const p of await plan(db, s, holidays)) {
     await Notifications.scheduleNotificationAsync({
       content: { title: p.title, body: p.body, data: { url: p.url, at: p.at.getTime() } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.at, channelId: CHANNEL },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: p.at.getTime() - offset, channelId: CHANNEL },
     });
   }
 }

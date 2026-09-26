@@ -23,6 +23,8 @@ export const styles = StyleSheet.create({
   backupBox: { padding: 14, gap: 12 },
   backupStatus: { paddingTop: 12 },
   refreshBtn: { height: 46 },
+  devTimes: { paddingTop: 12 },
+  devTimeBtn: { height: 46, flexGrow: 1, flexBasis: '45%' },
   refreshing: { opacity: 0.5 },
   radio: {
     flexDirection: 'row',

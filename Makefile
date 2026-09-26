@@ -1,4 +1,8 @@
-.PHONY: help install start start-tunnel android web clean reset prebuild local-apk local-apk-rebuild local-apk-clean eas-login eas-config eas-apk eas-aab adb-reverse start-tablet open-tablet screenshot wsl-usb
+.PHONY: help install start start-tunnel android web clean reset prebuild local-apk debug-local-apk local-apk-rebuild local-apk-clean eas-login eas-config eas-apk eas-aab adb-reverse start-tablet open-tablet screenshot wsl-usb
+
+# Nombre del proyecto = carpeta que contiene este Makefile (en minúsculas, válido para Docker).
+# Se usa para el APK y el contenedor de compilación.
+export APP_NAME := $(shell basename "$(CURDIR)" | tr '[:upper:]' '[:lower:]')
 
 # Puerto para depuración móvil (configurable vía: make <target> PORT=xxxx)
 PORT ?= 8082
@@ -13,7 +17,7 @@ RESET = \033[0m
 
 help:
 	@echo "================================================================="
-	@echo "  $(BLUE)GymSmart - Comandos para Desarrollo y Construcción$(RESET)"
+	@echo "  $(BLUE)$(APP_NAME) - Comandos para Desarrollo y Construcción$(RESET)"
 	@echo "================================================================="
 	@echo "Uso: make <comando>"
 	@echo ""
@@ -34,6 +38,7 @@ help:
 	@echo "$(BLUE)Compilación Local (Aislada con Docker):$(RESET)"
 	@echo "  prebuild          Genera las carpetas nativas de Android e iOS (expo prebuild)"
 	@echo "  local-apk         Genera el archivo APK localmente reutilizando caché"
+	@echo "  debug-local-apk   Genera un APK con herramientas de desarrollo (fecha simulada en Ajustes)"
 	@echo "  local-apk-rebuild Reconstruye la imagen Docker base y compila el APK"
 	@echo "  local-apk-clean   Elimina todas las cachés persistentes (volúmenes de Docker)"
 	@echo ""
@@ -106,17 +111,27 @@ local-apk:
 	@echo "$(BLUE)Asegurando carpeta dist...$(RESET)"
 	mkdir -p dist
 	@echo "$(BLUE)Iniciando compilación en Docker (reutilizando imagen base)...$(RESET)"
-	USER_ID=$$(id -u) GROUP_ID=$$(id -g) docker compose up
+	USER_ID=$$(id -u) GROUP_ID=$$(id -g) APK_NAME=$(APP_NAME).apk EXPO_PUBLIC_DEV_TOOLS=0 docker compose up
 	@echo "$(BLUE)Limpiando contenedor de compilación...$(RESET)"
 	docker compose down
 	@echo "$(GREEN)Compilación finalizada.$(RESET)"
-	@echo "El archivo APK se encuentra en: $(BLUE)./dist/gymsmart.apk$(RESET)"
+	@echo "El archivo APK se encuentra en: $(BLUE)./dist/$(APP_NAME).apk$(RESET)"
+
+debug-local-apk:
+	@echo "$(BLUE)Asegurando carpeta dist...$(RESET)"
+	mkdir -p dist
+	@echo "$(BLUE)Iniciando compilación en Docker con herramientas de desarrollo...$(RESET)"
+	USER_ID=$$(id -u) GROUP_ID=$$(id -g) APK_NAME=$(APP_NAME)-dev.apk EXPO_PUBLIC_DEV_TOOLS=1 docker compose up
+	@echo "$(BLUE)Limpiando contenedor de compilación...$(RESET)"
+	docker compose down
+	@echo "$(GREEN)Compilación finalizada.$(RESET)"
+	@echo "El archivo APK se encuentra en: $(BLUE)./dist/$(APP_NAME)-dev.apk$(RESET)"
 
 local-apk-rebuild:
 	@echo "$(BLUE)Reconstruyendo imagen Docker base y compilando APK...$(RESET)"
 	mkdir -p dist
 	chmod +x scripts/docker-build.sh
-	USER_ID=$$(id -u) GROUP_ID=$$(id -g) docker compose up --build
+	USER_ID=$$(id -u) GROUP_ID=$$(id -g) APK_NAME=$(APP_NAME).apk EXPO_PUBLIC_DEV_TOOLS=0 docker compose up --build
 	docker compose down
 	@echo "$(GREEN)Compilación finalizada.$(RESET)"
 

@@ -27,6 +27,11 @@ rsync -a --delete \
 
 cd "$WORKSPACE"
 
+# Gradle solo regenera el bundle JS si cambian archivos .js/.ts, no las variables de entorno.
+# Este marcador cambia con el modo para no reutilizar un bundle compilado con el otro.
+echo "// EXPO_PUBLIC_DEV_TOOLS=${EXPO_PUBLIC_DEV_TOOLS:-0}" > build-flavor.js
+echo "    → Herramientas de desarrollo: EXPO_PUBLIC_DEV_TOOLS=${EXPO_PUBLIC_DEV_TOOLS:-0}"
+
 # Restaurar la caché de la carpeta android si existe en el volumen
 if [ -d "$ANDROID_CACHE" ] && [ -f "$ANDROID_CACHE/build.gradle" ]; then
   echo "=== 1.1 Restaurando caché de la carpeta android/ ==="

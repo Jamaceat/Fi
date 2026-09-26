@@ -1,4 +1,5 @@
 import { t, tList } from '@/i18n';
+import { DEV_TOOLS } from '@/lib/devtools';
 
 // Todas las fechas se guardan como texto ISO local 'YYYY-MM-DD'.
 
@@ -11,14 +12,31 @@ export const fromISO = (s: string) => {
   return new Date(y, m - 1, d);
 };
 
-// Solo en desarrollo: "hoy" simulado (Ajustes → Desarrollo) para probar otros días.
-let simulatedToday: string | null = null;
+// Solo en desarrollo: reloj simulado (Ajustes → Desarrollo) para probar otros días y horas.
+// Es un desfase sobre la hora real, así que sigue avanzando y cambia de día a medianoche.
+let clockOffset = 0;
 
-export const setSimulatedToday = (iso: string | null) => {
-  simulatedToday = __DEV__ ? iso : null;
+/** Desfase del reloj simulado en ms (0 = hora real). */
+export const getClockOffset = () => clockOffset;
+
+/** Pone el reloj simulado en `date` (null = volver a la hora real). */
+export const setSimulatedNow = (date: Date | null) => {
+  clockOffset = DEV_TOOLS && date ? date.getTime() - Date.now() : 0;
 };
 
-export const todayISO = () => simulatedToday ?? toISO(new Date());
+/** Ahora, según el reloj de la app (simulado en desarrollo). */
+export const nowDate = () => new Date(Date.now() + clockOffset);
+
+/** Pasa `iso` a hoy conservando la hora actual del reloj. */
+export const setSimulatedToday = (iso: string | null) => {
+  if (!iso) return setSimulatedNow(null);
+  const now = nowDate();
+  const d = fromISO(iso);
+  d.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  setSimulatedNow(d);
+};
+
+export const todayISO = () => toISO(nowDate());
 
 /** Fecha real del teléfono, ignorando la simulada. */
 export const realTodayISO = () => toISO(new Date());

@@ -23,7 +23,7 @@ import {
 import { C } from '@/constants/theme';
 import { loadFixedData, setAllFixedReminders, setFixedReminder, type Fixed } from '@/db/repo';
 import { t } from '@/i18n';
-import { addDays, monthShort, realTodayISO, relativeDay, shortDate, toISO, weekdayAbbr, weekdayOf } from '@/lib/dates';
+import { addDays, monthShort, nowDate, relativeDay, shortDate, todayISO, toISO, weekdayAbbr, weekdayOf } from '@/lib/dates';
 import { fixedItems, type FixedItem } from '@/lib/finance';
 import {
   atHour,
@@ -107,7 +107,7 @@ export default function Notificaciones() {
 
   const data = useLoad(
     async (d) => {
-      const today = realTodayISO();
+      const today = todayISO();
       const fixedData = await loadFixedData(d);
       const items = fixedItems(fixedData, addDays(today, -31), addDays(today, DAYS_AHEAD), s.holiday, holidays)
         .filter((i) => !i.paid)
@@ -121,8 +121,8 @@ export default function Notificaciones() {
   const reminderOf = (f: Fixed): Reminder => edits[f.id] ?? { remind: !!f.remind, days: f.remind_days };
   const onCount = fixed.filter((f) => reminderOf(f).remind).length;
   const anyOn = s.remindFijos || s.weekly;
-  const today = realTodayISO();
-  const now = new Date();
+  const today = todayISO();
+  const now = nowDate();
 
   /** Si el permiso falta, lo pide; si está bloqueado, ofrece abrir los ajustes del teléfono. */
   const ensureAllowed = async () => {

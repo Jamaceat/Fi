@@ -6,12 +6,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gymsmart_apk_builder
+    container_name: ${APP_NAME:?Usa make local-apk o make debug-local-apk}_apk_builder
     environment:
       - USER_ID=${USER_ID}
       - GROUP_ID=${GROUP_ID}
       - GRADLE_USER_HOME=/root/.gradle
-      - APK_NAME=gymsmart.apk
+      - APK_NAME=${APK_NAME:-app-release.apk}
+      # 1 = incluye las herramientas de desarrollo (Ajustes → Desarrollo) en el APK
+      - EXPO_PUBLIC_DEV_TOOLS=${EXPO_PUBLIC_DEV_TOOLS:-0}
     volumes:
       # Montar código fuente del host como sólo lectura
       - .:/app/src-host:ro

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Platform, View } from 'react-native';
 
 import {
@@ -35,8 +35,9 @@ import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
 import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
-import { clampDay, fromISO, fullDate, lastDayOfMonth, longDate, realTodayISO, todayISO, toISO } from '@/lib/dates';
+import { clampDay, fromISO, fullDate, lastDayOfMonth, longDate, nowDate, realTodayISO, todayISO, toISO } from '@/lib/dates';
 import { pickBackup, shareBackup, type Backup } from '@/lib/backup';
+import { DEV_TOOLS } from '@/lib/devtools';
 import { exportCsv } from '@/lib/export';
 import { describePreset, presetName, PRESETS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
@@ -72,8 +73,9 @@ export default function Ajustes() {
     backupNow,
     removeBackup,
     loadBackup,
-    simulatedToday,
+    simulatedClock,
     setSimulatedToday,
+    simulateTime,
   } = useApp();
   const [tab, setTab] = useState<Tab>('fechas');
   const [refreshing, setRefreshing] = useState(false);
@@ -618,7 +620,7 @@ export default function Ajustes() {
             </Stack>
           </Stack>
 
-          {__DEV__ && (
+          {DEV_TOOLS && (
             <Stack gap={10}>
               <Stack gap={4}>
                 <T w={800} size={16}>
@@ -630,15 +632,16 @@ export default function Ajustes() {
               </Stack>
               <View style={[common.box, st.backupBox]}>
                 <Row gap={12}>
-                  <View style={[st.defIcon, simulatedToday ? st.defIconHoliday : st.defIconNeutral]}>
-                    <IconCalendar color={simulatedToday ? C.holidayDark : C.ink} />
+                  <View style={[st.defIcon, simulatedClock ? st.defIconHoliday : st.defIconNeutral]}>
+                    <IconCalendar color={simulatedClock ? C.holidayDark : C.ink} />
                   </View>
                   <Stack gap={2} style={layout.fill}>
                     <T w={700} size={14}>
                       {fullDate(today)}
                     </T>
+                    <DevClock />
                     <T size={12.5} color={C.muted}>
-                      {simulatedToday ? t('settings.dev.simulated', { date: longDate(realTodayISO()) }) : t('settings.dev.real')}
+                      {simulatedClock ? t('settings.dev.simulated', { date: longDate(realTodayISO()) }) : t('settings.dev.real')}
                     </T>
                   </Stack>
                 </Row>
@@ -679,7 +682,28 @@ export default function Ajustes() {
                     incLabel={t('settings.dev.nextYear')}
                   />
                 </Row>
-                {simulatedToday && (
+                <Stack gap={8} style={[common.divider, st.devTimes]}>
+                  <T w={700} size={14.5}>
+                    {t('settings.dev.times')}
+                  </T>
+                  <T size={12.5} color={C.muted}>
+                    {t('settings.dev.timesHelp')}
+                  </T>
+                  <View style={st.optGrid}>
+                    {DEV_TIMES.map(([hour, minute, second, key]) => (
+                      <Tap
+                        key={key}
+                        onPress={() => simulateTime(hour, minute, second)}
+                        style={[common.outlineBtn, st.devTimeBtn]}>
+                        <IconClock size={17} />
+                        <T w={800} size={14}>
+                          {t(`settings.dev.at.${key}`)}
+                        </T>
+                      </Tap>
+                    ))}
+                  </View>
+                </Stack>
+                {simulatedClock && (
                   <Tap onPress={() => setSimulatedToday(null)} style={[common.outlineBtn, st.refreshBtn]}>
                     <IconRefresh size={17} />
                     <T w={800} size={14}>
@@ -693,6 +717,29 @@ export default function Ajustes() {
         </>
       )}
     </Screen>
+  );
+}
+
+/** Diez segundos antes de cada hora de aviso (7:00, 12:00, 19:00) y de medianoche. */
+const DEV_TIMES = [
+  [6, 59, 50, 'morning'],
+  [11, 59, 50, 'noon'],
+  [18, 59, 50, 'evening'],
+  [23, 59, 50, 'midnight'],
+] as const;
+
+/** Hora del reloj de la app (simulada o real), al segundo. */
+function DevClock() {
+  const [now, setNow] = useState(nowDate);
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowDate()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    <T w={700} size={13} color={C.muted}>
+      {t('settings.dev.time', { time: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` })}
+    </T>
   );
 }
 

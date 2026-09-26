@@ -5,7 +5,18 @@ import { AppState as RNAppState } from 'react-native';
 
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/db/repo';
 import { backupIfDue, deleteBackup, importBackup, lastBackupAt, writeBackup, type Backup } from '@/lib/backup';
-import { fromISO, periodOf, periodRange, setSimulatedToday, todayISO, type Period } from '@/lib/dates';
+import {
+  addDays,
+  fromISO,
+  nowDate,
+  periodOf,
+  periodRange,
+  samePeriod,
+  setSimulatedNow,
+  setSimulatedToday,
+  todayISO,
+  type Period,
+} from '@/lib/dates';
 import { loadHolidays, syncHolidays, type HolidayMap } from '@/lib/holidays';
 import { syncNotifications } from '@/lib/notifications';
 
@@ -36,9 +47,14 @@ type AppState = {
   removeBackup: () => void;
   /** Reemplaza todos los datos y ajustes por los de un respaldo importado. */
   loadBackup: (backup: Backup) => Promise<void>;
-  /** Solo desarrollo: fecha "hoy" simulada (null = la real). No se guarda: se pierde al recargar la app. */
-  simulatedToday: string | null;
+  /** Fecha de hoy (ISO); cambia sola a medianoche. */
+  today: string;
+  /** Solo desarrollo: ¿el reloj de la app está simulado? No se guarda: se pierde al recargar la app. */
+  simulatedClock: boolean;
+  /** Solo desarrollo: pasa a otra fecha conservando la hora (null = volver al reloj real). */
   setSimulatedToday: (iso: string | null) => void;
+  /** Solo desarrollo: pone el reloj a esa hora de hoy (p. ej. un minuto antes de un aviso). */
+  simulateTime: (hour: number, minute: number, second: number) => void;
 };
 
 type HolidayState = { map: HolidayMap; fetched: ReadonlyMap<number, string> };
@@ -63,7 +79,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastBackup, setLastBackup] = useState<string | null | undefined>(undefined);
   const lastBackupRef = useRef<string | null>(null);
   const backingUp = useRef(false);
-  const [simulatedToday, setSimulated] = useState<string | null>(null);
+  const [simulatedClock, setSimulatedClock] = useState(false);
+  const [today, setToday] = useState(todayISO);
 
   const reloadHolidays = useCallback(async () => {
     setHol(await loadHolidays(db));
@@ -180,12 +197,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setVersion((v) => v + 1);
   };
 
-  const simulateToday = (iso: string | null) => {
-    setSimulatedToday(iso);
-    setSimulated(iso);
+  const monthStart = settings?.monthStart;
+
+  // A medianoche (según el reloj de la app) cambia "hoy": se recargan las pantallas y los avisos.
+  // Si se estaba viendo el mes en curso, se pasa al nuevo cuando empieza.
+  useEffect(() => {
+    if (monthStart === undefined) return;
+    const check = () => {
+      const next = todayISO();
+      if (next === today) return;
+      setToday(next);
+      setPeriod((p) => (p && samePeriod(p, periodOf(today, monthStart)) ? periodOf(next, monthStart) : p));
+      setVersion((v) => v + 1);
+    };
+    const midnight = fromISO(addDays(today, 1)).getTime();
+    const id = setTimeout(check, Math.max(0, midnight - nowDate().getTime()) + 50);
+    // Con la app en segundo plano el temporizador puede no correr: se revisa al volver.
+    const sub = RNAppState.addEventListener('change', (state) => state === 'active' && check());
+    return () => {
+      clearTimeout(id);
+      sub.remove();
+    };
+  }, [today, monthStart]);
+
+  const clockChanged = (simulated: boolean) => {
+    setSimulatedClock(simulated);
+    setToday(todayISO());
     if (settings) setPeriod(periodOf(todayISO(), settings.monthStart));
     needHolidays(aroundToday());
     setVersion((v) => v + 1);
+  };
+
+  const simulateToday = (iso: string | null) => {
+    setSimulatedToday(iso);
+    clockChanged(iso !== null);
+  };
+
+  const simulateTime = (hour: number, minute: number, second: number) => {
+    const d = fromISO(todayISO());
+    d.setHours(hour, minute, second, 0);
+    setSimulatedNow(d);
+    clockChanged(true);
   };
 
   if (!settings || !period || !hol || lastBackup === undefined) return null;
@@ -207,8 +259,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     backupNow,
     removeBackup,
     loadBackup,
-    simulatedToday,
+    today,
+    simulatedClock,
     setSimulatedToday: simulateToday,
+    simulateTime,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

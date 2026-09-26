@@ -1012,7 +1012,7 @@ export const es = {
     },
     dev: {
       title: 'Desarrollo',
-      text: 'Solo en modo desarrollo. Cambia la fecha que la app toma como hoy; se pierde al recargar la app.',
+      text: 'Solo en modo desarrollo. Cambia la fecha y hora que la app toma como ahora (también para programar los avisos); se pierde al recargar la app.',
       today: 'Simular fecha de hoy',
       real: 'Usando la fecha real',
       simulated: 'Simulada · real: {{date}}',
@@ -1026,6 +1026,16 @@ export const es = {
       prevYear: 'Año anterior',
       nextYear: 'Año siguiente',
       reset: 'Volver a la fecha real',
+      time: 'Hora: {{time}}',
+      times: 'Unos segundos antes de…',
+      timesHelp:
+        'Lleva el reloj de la app a esa hora de hoy. Con la hora de avisos elegida, el recordatorio llega en 10 segundos; 11:59:50 p. m. prueba el cambio de día.',
+      at: {
+        morning: '6:59:50 a. m.',
+        noon: '11:59:50 a. m.',
+        evening: '6:59:50 p. m.',
+        midnight: '11:59:50 p. m.',
+      },
     },
     help: {
       defaults:
