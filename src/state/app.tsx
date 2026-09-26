@@ -5,7 +5,7 @@ import { AppState as RNAppState } from 'react-native';
 
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type Settings } from '@/db/repo';
 import { backupIfDue, deleteBackup, importBackup, lastBackupAt, writeBackup, type Backup } from '@/lib/backup';
-import { periodOf, periodRange, todayISO, type Period } from '@/lib/dates';
+import { fromISO, periodOf, periodRange, setSimulatedToday, todayISO, type Period } from '@/lib/dates';
 import { loadHolidays, syncHolidays, type HolidayMap } from '@/lib/holidays';
 
 type AppState = {
@@ -35,13 +35,16 @@ type AppState = {
   removeBackup: () => void;
   /** Reemplaza todos los datos y ajustes por los de un respaldo importado. */
   loadBackup: (backup: Backup) => Promise<void>;
+  /** Solo desarrollo: fecha "hoy" simulada (null = la real). No se guarda: se pierde al recargar la app. */
+  simulatedToday: string | null;
+  setSimulatedToday: (iso: string | null) => void;
 };
 
 type HolidayState = { map: HolidayMap; fetched: ReadonlyMap<number, string> };
 const EMPTY_HOLIDAYS: HolidayState = { map: new Map(), fetched: new Map() };
 
 const aroundToday = () => {
-  const y = new Date().getFullYear();
+  const y = fromISO(todayISO()).getFullYear();
   return [y - 1, y, y + 1];
 };
 
@@ -59,6 +62,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [lastBackup, setLastBackup] = useState<string | null | undefined>(undefined);
   const lastBackupRef = useRef<string | null>(null);
   const backingUp = useRef(false);
+  const [simulatedToday, setSimulated] = useState<string | null>(null);
 
   const reloadHolidays = useCallback(async () => {
     setHol(await loadHolidays(db));
@@ -167,6 +171,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setVersion((v) => v + 1);
   };
 
+  const simulateToday = (iso: string | null) => {
+    setSimulatedToday(iso);
+    setSimulated(iso);
+    if (settings) setPeriod(periodOf(todayISO(), settings.monthStart));
+    needHolidays(aroundToday());
+    setVersion((v) => v + 1);
+  };
+
   if (!settings || !period || !hol || lastBackup === undefined) return null;
 
   const value: AppState = {
@@ -186,6 +198,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     backupNow,
     removeBackup,
     loadBackup,
+    simulatedToday,
+    setSimulatedToday: simulateToday,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

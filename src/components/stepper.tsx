@@ -22,12 +22,12 @@ import { IconMinus, IconPlus } from './icons';
 import { G, styles as st } from './stepper.styles';
 
 /**
- * Inicio de cada zona, como fracción de media barra: quieto, de a uno (la más ancha),
+ * Inicio de cada zona, como fracción de media barra: quieto, un solo paso, de a uno lento,
  * rápido y muy rápido (solo el tramo final).
  */
-const ZONES = [0.1, 0.6, 0.85] as const;
-/** Pausa entre pasos (ms) según la zona. */
-const DELAYS = [0, 420, 150, 55] as const;
+const ZONES = [0.1, 0.35, 0.6, 0.85] as const;
+/** Pausa entre pasos (ms) según la zona; null = un solo paso al entrar, sin repetir. */
+const DELAYS = [0, null, 420, 150, 55] as const;
 // Llegan desacelerando, sin rebote.
 const EASE = Easing.out(Easing.cubic);
 const RETURN = { duration: 200, easing: EASE };
@@ -37,13 +37,13 @@ const CLOSE = { duration: 180, easing: EASE };
 function zoneOf(d: number) {
   'worklet';
   const a = Math.abs(d);
-  const level = a < ZONES[0] ? 0 : a < ZONES[1] ? 1 : a < ZONES[2] ? 2 : 3;
+  const level = a < ZONES[0] ? 0 : a < ZONES[1] ? 1 : a < ZONES[2] ? 2 : a < ZONES[3] ? 3 : 4;
   return d < 0 ? -level : level;
 }
 
 const TONES = {
-  dec: [C.outSoft, C.outPanelLine, C.outBarLight],
-  inc: [C.inSoft, C.inTrack2, C.inBarLight],
+  dec: [C.outSoft, C.outPanelLine, C.outBarLight, C.outBar],
+  inc: [C.inSoft, C.inTrack2, C.inBarLight, C.inBar],
 } as const;
 const tone = (zone: number) => (zone === 0 ? C.chip : TONES[zone < 0 ? 'dec' : 'inc'][Math.abs(zone) - 1]);
 
@@ -95,6 +95,7 @@ export function Stepper({
   });
 
   // Repite el paso mientras el control esté fuera del reposo, al ritmo de la zona.
+  // La primera zona solo da un paso al entrar desde el reposo (o desde el otro lado).
   const prevZone = useRef(0);
   useEffect(() => {
     const prev = prevZone.current;
@@ -104,11 +105,11 @@ export function Stepper({
     let id: ReturnType<typeof setTimeout> | undefined;
     const step = () => {
       (zone > 0 ? handlers.current.onInc : handlers.current.onDec)();
-      id = setTimeout(step, delay);
+      if (delay !== null) id = setTimeout(step, delay);
     };
     // Al salir del reposo o cambiar de lado da el primer paso ya; al cambiar de ritmo solo reprograma.
     if (Math.sign(zone) !== Math.sign(prev)) step();
-    else id = setTimeout(step, delay);
+    else if (delay !== null) id = setTimeout(step, delay);
     return () => clearTimeout(id);
   }, [zone]);
 

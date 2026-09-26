@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type PressableProps,
   type StyleProp,
   type TextInputProps,
@@ -15,8 +16,17 @@ import {
   type ViewProps,
   type ViewStyle,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { C, F, type Weight } from '@/constants/theme';
 import { t } from '@/i18n';
@@ -39,6 +49,51 @@ type TProps = TextProps & {
 export function T({ w = 500, serif, size = 14, color = C.ink, tabular, style, ...rest }: TProps) {
   const fontFamily = serif ? (w >= 600 ? F.serif600 : F.serif500) : F[w];
   return <Text {...rest} style={[{ fontFamily, fontSize: size, color }, tabular && s.tabular, style]} />;
+}
+
+/** Duración y curva de los cambios de valor (montos, barras): suave y sin rebote. */
+export const VALUE_MS = 650;
+export const VALUE_EASE = Easing.out(Easing.cubic);
+
+const ValueMotion = createContext(true);
+
+/**
+ * Con `animate={false}`, los montos y barras de adentro cambian de golpe en lugar de contar
+ * o deslizarse (p. ej. al pasar a otro mes, donde no es el mismo valor que cambia).
+ */
+export function ValueMotionProvider({ animate, children }: { animate: boolean; children: ReactNode }) {
+  return <ValueMotion.Provider value={animate}>{children}</ValueMotion.Provider>;
+}
+
+/** Número que, al cambiar, cuenta desde el valor anterior hasta el nuevo. */
+export function CountText({ value, format, ...rest }: TProps & { value: number; format: (n: number) => string }) {
+  const reduceMotion = useReducedMotion();
+  const animate = useContext(ValueMotion) && !reduceMotion;
+  const [shown, setShown] = useState(value);
+  const current = useRef(value);
+  // Sin animación salta al valor, para que al volver a animar cuente desde aquí.
+  if (!animate && shown !== value) setShown(value);
+
+  useEffect(() => {
+    const from = current.current;
+    if (from === value) return;
+    if (!animate) {
+      current.current = value;
+      return;
+    }
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / VALUE_MS);
+      current.current = p < 1 ? from + (value - from) * VALUE_EASE(p) : value;
+      setShown(current.current);
+      if (p < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value, animate]);
+
+  return <T {...rest}>{format(Math.round(animate ? shown : value))}</T>;
 }
 
 // ——— Contenedores ———
@@ -127,7 +182,8 @@ export function Title({ kicker, title }: { kicker?: string; title: ReactNode }) 
           {kicker}
         </T>
       ) : null}
-      <T serif w={600} size={32} style={s.headerTitle}>
+      {/* Una sola línea: si no cabe (p. ej. "Septiembre" junto a los botones), reduce la letra en vez de partir la palabra. */}
+      <T serif w={600} size={32} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={s.headerTitle}>
         {title}
       </T>
     </Stack>
@@ -265,9 +321,15 @@ export function Chip({
 
 export function Progress({ pct, color, track, height = 8 }: { pct: number; color: string; track: string; height?: number }) {
   const w = Math.max(0, Math.min(100, pct));
+  const animate = useContext(ValueMotion);
+  const width = useSharedValue(w);
+  useEffect(() => {
+    width.value = animate ? withTiming(w, { duration: VALUE_MS, easing: VALUE_EASE }) : w;
+  }, [w, width, animate]);
+  const fill = useAnimatedStyle(() => ({ width: `${width.value}%` }));
   return (
     <View style={[s.progressTrack, { height, backgroundColor: track }]}>
-      <View style={[s.progressFill, { width: `${w}%`, height, backgroundColor: color }]} />
+      <Animated.View style={[s.progressFill, { height, backgroundColor: color }, fill]} />
     </View>
   );
 }
@@ -510,6 +572,10 @@ export function EmptyBox({ title, hint }: { title: string; hint?: string }) {
 
 // ——— Hoja inferior ———
 
+const SHEET_FADE_MS = 200;
+const SHEET_SLIDE_MS = 280;
+const SHEET_EASE = Easing.out(Easing.cubic);
+
 export function Sheet({
   visible,
   onClose,
@@ -522,11 +588,45 @@ export function Sheet({
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
+  // El Modal sigue montado mientras corre la animación de cierre.
+  const [mounted, setMounted] = useState(visible);
+  if (visible && !mounted) setMounted(true);
+
+  const fade = useSharedValue(0); // fondo oscuro: solo aparece, no se desliza
+  const slide = useSharedValue(0); // panel: sube desde abajo
+
+  useEffect(() => {
+    const ms = (n: number) => (reduceMotion ? 0 : n);
+    if (visible) {
+      // Primero se oscurece el fondo; después sube la hoja.
+      fade.set(withTiming(1, { duration: ms(SHEET_FADE_MS), easing: SHEET_EASE }));
+      slide.set(withDelay(ms(SHEET_FADE_MS - 60), withTiming(1, { duration: ms(SHEET_SLIDE_MS), easing: SHEET_EASE })));
+    } else {
+      // Al cerrar, al revés: baja la hoja y luego se aclara el fondo.
+      slide.set(withTiming(0, { duration: ms(SHEET_SLIDE_MS - 60), easing: SHEET_EASE }));
+      fade.set(
+        withDelay(
+          ms(SHEET_SLIDE_MS - 100),
+          withTiming(0, { duration: ms(SHEET_FADE_MS - 40), easing: SHEET_EASE }, (done) => {
+            if (done) scheduleOnRN(setMounted, false);
+          }),
+        ),
+      );
+    }
+  }, [visible, reduceMotion, fade, slide]);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: fade.get() }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - slide.get()) * height }] }));
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={layout.fill}>
-        <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel={t('ui.closePanel')} />
-        <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.sheetWrap}>
+        <Animated.View style={[s.backdrop, backdropStyle]}>
+          <Pressable style={layout.fill} onPress={onClose} accessibilityLabel={t('ui.closePanel')} />
+        </Animated.View>
+        <Animated.View style={[s.sheet, { paddingBottom: insets.bottom + 24 }, sheetStyle]}>
           <View style={s.handle} />
           <ScrollView contentContainerStyle={s.sheetContent} keyboardShouldPersistTaps="handled">
             {title !== undefined && (
@@ -541,7 +641,7 @@ export function Sheet({
             )}
             {children}
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );

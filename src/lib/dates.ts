@@ -11,7 +11,17 @@ export const fromISO = (s: string) => {
   return new Date(y, m - 1, d);
 };
 
-export const todayISO = () => toISO(new Date());
+// Solo en desarrollo: "hoy" simulado (Ajustes → Desarrollo) para probar otros días.
+let simulatedToday: string | null = null;
+
+export const setSimulatedToday = (iso: string | null) => {
+  simulatedToday = __DEV__ ? iso : null;
+};
+
+export const todayISO = () => simulatedToday ?? toISO(new Date());
+
+/** Fecha real del teléfono, ignorando la simulada. */
+export const realTodayISO = () => toISO(new Date());
 
 /** "2026-09" (mes 0–11) */
 export const monthKey = (year: number, month: number) => `${year}-${pad(month + 1)}`;

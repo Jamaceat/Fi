@@ -45,6 +45,7 @@ export const C = {
   inDark: '#164A72',
   inSoft: '#E3EEF6',
   inIconBg: '#E3EDF5',
+  inBar: '#5A8DB5',
   inBarLight: '#8DB6D6',
   inText: '#9CC5E6',
   inTrack: '#EDF1F4',

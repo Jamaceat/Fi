@@ -19,7 +19,7 @@ import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
 import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
-import { longDate, toISO } from '@/lib/dates';
+import { clampDay, fromISO, fullDate, lastDayOfMonth, longDate, realTodayISO, todayISO, toISO } from '@/lib/dates';
 import { pickBackup, shareBackup, type Backup } from '@/lib/backup';
 import { exportCsv } from '@/lib/export';
 import { describePreset, presetName, PRESETS, unitLabel, UNITS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
@@ -59,6 +59,8 @@ export default function Ajustes() {
     backupNow,
     removeBackup,
     loadBackup,
+    simulatedToday,
+    setSimulatedToday,
   } = useApp();
   const [refreshing, setRefreshing] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
@@ -173,6 +175,15 @@ export default function Ajustes() {
     closeWipe();
     setToast({ warn: true, title: t('settings.data.wiped'), text: t('settings.data.wipedText') });
   };
+
+  // Cada parte de la fecha se mueve dentro de sus límites, sin pasar al mes o año vecino.
+  const today = todayISO();
+  const sim = fromISO(today);
+  const [simY, simM, simD] = [sim.getFullYear(), sim.getMonth(), sim.getDate()];
+  const simulate = (y: number, m: number, d: number) => setSimulatedToday(toISO(clampDay(y, m, d)));
+  const simulateDay = (n: number) => simulate(simY, simM, Math.min(Math.max(1, simD + n), lastDayOfMonth(simY, simM)));
+  const simulateMonth = (n: number) => simulate(simY, Math.min(Math.max(0, simM + n), 11), simD);
+  const simulateYear = (n: number) => simulate(Math.min(Math.max(2000, simY + n), 2100), simM, simD);
 
   const holidaySummary =
     holidays.size > 0
@@ -609,6 +620,81 @@ export default function Ajustes() {
           )}
         </Stack>
       </Stack>
+
+      {__DEV__ && (
+        <Stack gap={10}>
+          <Stack gap={4}>
+            <T w={800} size={16}>
+              {t('settings.dev.title')}
+            </T>
+            <T size={12.5} color={C.muted}>
+              {t('settings.dev.text')}
+            </T>
+          </Stack>
+          <View style={[common.box, st.backupBox]}>
+            <Row gap={12}>
+              <View style={[st.defIcon, simulatedToday ? st.defIconHoliday : st.defIconNeutral]}>
+                <IconCalendar color={simulatedToday ? C.holidayDark : C.ink} />
+              </View>
+              <Stack gap={2} style={layout.fill}>
+                <T w={700} size={14}>
+                  {fullDate(today)}
+                </T>
+                <T size={12.5} color={C.muted}>
+                  {simulatedToday
+                    ? t('settings.dev.simulated', { date: longDate(realTodayISO()) })
+                    : t('settings.dev.real')}
+                </T>
+              </Stack>
+            </Row>
+            <Row style={[common.divider, st.settingRowCompact]}>
+              <T w={700} size={14.5} style={layout.fill}>
+                {t('settings.dev.day')}
+              </T>
+              <Stepper
+                value={String(simD)}
+                onDec={() => simulateDay(-1)}
+                onInc={() => simulateDay(1)}
+                decLabel={t('settings.dev.prevDay')}
+                incLabel={t('settings.dev.nextDay')}
+              />
+            </Row>
+            <Row style={st.settingRowCompact}>
+              <T w={700} size={14.5} style={layout.fill}>
+                {t('settings.dev.month')}
+              </T>
+              <Stepper
+                value={String(simM + 1)}
+                onDec={() => simulateMonth(-1)}
+                onInc={() => simulateMonth(1)}
+                decLabel={t('settings.dev.prevMonth')}
+                incLabel={t('settings.dev.nextMonth')}
+              />
+            </Row>
+            <Row style={st.settingRowCompact}>
+              <T w={700} size={14.5} style={layout.fill}>
+                {t('settings.dev.year')}
+              </T>
+              <Stepper
+                minWidth={56}
+                value={String(simY)}
+                onDec={() => simulateYear(-1)}
+                onInc={() => simulateYear(1)}
+                decLabel={t('settings.dev.prevYear')}
+                incLabel={t('settings.dev.nextYear')}
+              />
+            </Row>
+            {simulatedToday && (
+              <Tap onPress={() => setSimulatedToday(null)} style={[common.outlineBtn, st.refreshBtn]}>
+                <IconRefresh size={17} />
+                <T w={800} size={14}>
+                  {t('settings.dev.reset')}
+                </T>
+              </Tap>
+            )}
+          </View>
+        </Stack>
+      )}
     </Screen>
   );
 }

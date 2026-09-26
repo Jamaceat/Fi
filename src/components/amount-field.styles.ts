@@ -14,6 +14,8 @@ export const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, alignSelf: 'center' },
   partValue: { fontFamily: F.serif600, minWidth: 48, textAlign: 'right' },
   partLabel: { fontFamily: F[600], color: C.muted },
+  reel: { overflow: 'hidden' },
+  reelStrip: { alignItems: 'center' },
   caret: { width: 2, borderRadius: 1, marginLeft: 4 },
   hidden: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.02, color: 'transparent' },
 });

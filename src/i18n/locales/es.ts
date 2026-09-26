@@ -153,6 +153,14 @@ export const es = {
 
   home: {
     kicker: 'Mis finanzas · {{year}}',
+    picker: {
+      open: 'Elegir mes y año. Viendo {{month}} {{year}}',
+      title: 'Ir a un mes',
+      openYears: 'Elegir año. Viendo {{year}}',
+      yearRange: '{{from}} – {{to}}',
+      prevYears: 'Años anteriores',
+      nextYears: 'Años siguientes',
+    },
     hero: {
       label: 'Balance del mes',
       available: 'Disponible este mes',
@@ -161,9 +169,6 @@ export const es = {
     },
     fund: {
       title: 'Fondo total',
-      months_one: 'Acumulado de {{count}} mes',
-      months_other: 'Acumulado de {{count}} meses',
-      empty: 'Aún no hay movimientos',
     },
     shortcuts: {
       open: 'Abrir {{name}}',
@@ -202,19 +207,21 @@ export const es = {
 
   movements: {
     title: 'Movimientos',
+    all: 'Todos',
     filters: {
       todos: 'Todos',
       fijo: 'Fijos',
       ocasional: 'Ocasionales',
     },
     total: {
-      todos: { gasto: 'Total de gastos', ingreso: 'Total de ingresos' },
-      fijo: { gasto: 'Total gastos fijos', ingreso: 'Total ingresos fijos' },
-      ocasional: { gasto: 'Total gastos ocasionales', ingreso: 'Total ingresos ocasionales' },
+      todos: { gasto: 'Total de gastos', ingreso: 'Total de ingresos', todos: 'Balance total' },
+      fijo: { gasto: 'Total gastos fijos', ingreso: 'Total ingresos fijos', todos: 'Balance de fijos' },
+      ocasional: { gasto: 'Total gastos ocasionales', ingreso: 'Total ingresos ocasionales', todos: 'Balance de ocasionales' },
     },
     empty: {
       gasto: 'Sin gastos en este filtro',
       ingreso: 'Sin ingresos en este filtro',
+      todos: 'Sin movimientos en este filtro',
     },
     emptyHint: 'Toca + en la barra inferior para registrar uno.',
     actions: {
@@ -888,6 +895,23 @@ export const es = {
       wipeConfirm: 'Borrar todo',
       wiped: 'Datos borrados',
       wipedText: 'La app quedó en cero. Tus ajustes se mantienen.',
+    },
+    dev: {
+      title: 'Desarrollo',
+      text: 'Solo en modo desarrollo. Cambia la fecha que la app toma como hoy; se pierde al recargar la app.',
+      today: 'Simular fecha de hoy',
+      real: 'Usando la fecha real',
+      simulated: 'Simulada · real: {{date}}',
+      day: 'Día',
+      month: 'Mes',
+      prevDay: 'Día anterior',
+      nextDay: 'Día siguiente',
+      prevMonth: 'Mes anterior',
+      nextMonth: 'Mes siguiente',
+      year: 'Año',
+      prevYear: 'Año anterior',
+      nextYear: 'Año siguiente',
+      reset: 'Volver a la fecha real',
     },
     help: {
       defaults:

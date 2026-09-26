@@ -3,6 +3,9 @@ import { StyleSheet } from 'react-native';
 import { C } from '@/constants/theme';
 
 export const styles = StyleSheet.create({
+  titleBtn: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, flexShrink: 1 },
+  titleIcon: { width: 32, height: 32, borderRadius: 11, backgroundColor: C.chip, marginBottom: 5 },
+  deck: { gap: 18 },
   hero: { backgroundColor: C.hero, borderRadius: 24, padding: 22, gap: 18 },
   heroAmount: { letterSpacing: -1 },
   tile: { flex: 1, backgroundColor: C.heroTile, borderRadius: 16, padding: 14, gap: 6 },

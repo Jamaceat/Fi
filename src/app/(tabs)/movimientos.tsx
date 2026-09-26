@@ -37,7 +37,7 @@ import {
 import { t } from '@/i18n';
 import { longDate, periodLabel, shortDate } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
-import { APPROX, cleanAmount, dots, fmt, fmtFlow, joinMeta } from '@/lib/format';
+import { APPROX, cleanAmount, dots, fmt, fmtFlow, joinMeta, signed } from '@/lib/format';
 import { movementBadge } from '@/lib/labels';
 import type { Kind } from '@/lib/schedule';
 import { useApp, useLoad } from '@/state/app';
@@ -45,6 +45,8 @@ import { common, layout } from '@/styles/common';
 import { styles as st } from '@/styles/screens/movimientos.styles';
 
 type Filter = 'todos' | 'fijo' | 'ocasional';
+/** Pestaña de tipo: gastos, ingresos o ambos. */
+type Tab = Kind | 'todos';
 
 const FILTERS: Filter[] = ['todos', 'fijo', 'ocasional'];
 
@@ -53,12 +55,13 @@ type Entry = { mov: Movement; item?: never } | { item: FixedItem; mov?: never };
 
 const entryDate = (e: Entry) => (e.mov ? e.mov.date : e.item.occ.date);
 const isFixedEntry = (e: Entry) => !!e.item || e.mov?.fixed_id != null;
+const entryType = (e: Entry): Kind => (e.mov ? e.mov.type : e.item.fixed.type);
 
 export default function Movimientos() {
   const db = useSQLiteContext();
   const { period, range, settings, bump, holidays } = useApp();
   const params = useLocalSearchParams<{ tab?: string; filter?: string }>();
-  const [tab, setTab] = useState<Kind>('gasto');
+  const [tab, setTab] = useState<Tab>('gasto');
   const [filter, setFilter] = useState<Filter>('todos');
   const [lastParams, setLastParams] = useState('');
   // Movimiento fijo tocado: abre el selector calendario / editar.
@@ -71,7 +74,7 @@ export default function Movimientos() {
   const paramsKey = `${params.tab ?? ''}|${params.filter ?? ''}`;
   if (paramsKey !== lastParams) {
     setLastParams(paramsKey);
-    if (params.tab === 'gasto' || params.tab === 'ingreso') setTab(params.tab);
+    if (params.tab === 'gasto' || params.tab === 'ingreso' || params.tab === 'todos') setTab(params.tab);
     if (FILTERS.includes(params.filter as Filter)) setFilter(params.filter as Filter);
   }
   useEffect(() => {
@@ -90,14 +93,19 @@ export default function Movimientos() {
   const movs = data?.movs ?? [];
   const pending = data?.pending ?? [];
 
-  const g = tab === 'gasto';
-  const accent = g ? C.out : C.in;
   const entries: Entry[] = [...movs.map((mov) => ({ mov })), ...pending.map((item) => ({ item }))];
   const list = entries
-    .filter((e) => (e.mov ? e.mov.type : e.item.fixed.type) === tab)
+    .filter((e) => tab === 'todos' || entryType(e) === tab)
     .filter((e) => filter === 'todos' || (filter === 'fijo') === isFixedEntry(e))
     .sort((a, b) => (entryDate(a) < entryDate(b) ? 1 : entryDate(a) > entryDate(b) ? -1 : 0));
-  const total = sum(list.map((e) => e.mov ?? e.item));
+  // En "Todos" el total es el balance: ingresos menos gastos.
+  const total = sum(
+    list.map((e) => {
+      const { amount } = e.mov ?? e.item;
+      return { amount: tab === 'todos' && entryType(e) === 'gasto' ? -amount : amount };
+    }),
+  );
+  const accent = tab === 'gasto' ? C.out : tab === 'ingreso' ? C.in : total < 0 ? C.out : total > 0 ? C.in : C.ink;
 
   const toggleFixed = async (item: FixedItem) => {
     if (item.fixed.variable) {
@@ -157,14 +165,17 @@ export default function Movimientos() {
     <Screen gap={16}>
       <Title kicker={periodLabel(period)} title={t('movements.title')} />
 
-      <Segmented
-        options={[
-          { id: 'gasto', label: t('common.expenses') },
-          { id: 'ingreso', label: t('common.incomes') },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
+      <Stack gap={8}>
+        <Segmented options={[{ id: 'todos', label: t('movements.all') }]} value={tab} onChange={setTab} />
+        <Segmented
+          options={[
+            { id: 'gasto', label: t('common.expenses') },
+            { id: 'ingreso', label: t('common.incomes') },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </Stack>
 
       <Row gap={8}>
         {FILTERS.map((id) => (
@@ -178,7 +189,7 @@ export default function Movimientos() {
             {t(`movements.total.${filter}.${tab}`)}
           </T>
           <T serif w={600} size={26} color={accent} tabular numberOfLines={1} adjustsFontSizeToFit>
-            {fmt(total)}
+            {tab === 'todos' ? signed(total) : fmt(total)}
           </T>
         </Stack>
         <T w={700} size={12.5} color={C.muted}>
@@ -190,15 +201,16 @@ export default function Movimientos() {
         <EmptyBox title={t(`movements.empty.${tab}`)} hint={t('movements.emptyHint')} />
       ) : (
         <Card style={common.listCard}>
-          {list.map((e, i) =>
-            e.mov ? (
+          {list.map((e, i) => {
+            const income = entryType(e) === 'ingreso';
+            return e.mov ? (
               <MovementRow
                 key={e.mov.id}
                 first={i === 0}
                 name={e.mov.name}
                 meta={joinMeta(e.mov.category, shortDate(e.mov.date), !!e.mov.extraordinary && t('common.extraordinaryLower'))}
-                amount={fmtFlow(e.mov.amount, !g)}
-                income={!g}
+                amount={fmtFlow(e.mov.amount, income)}
+                income={income}
                 badge={movementBadge(e.mov)}
                 check={{ on: !!e.mov.paid, onToggle: () => toggleMovement(e.mov) }}
                 onPress={() => (e.mov.fixed_id != null ? setPicked(e.mov) : editMovement(e.mov))}
@@ -209,14 +221,14 @@ export default function Movimientos() {
                 first={i === 0}
                 name={e.item.name}
                 meta={joinMeta(e.item.fixed.category, shortDate(e.item.occ.date), adjustNote(e.item))}
-                amount={(e.item.fixed.variable ? APPROX : '') + fmtFlow(e.item.amount, !g)}
-                income={!g}
+                amount={(e.item.fixed.variable ? APPROX : '') + fmtFlow(e.item.amount, income)}
+                income={income}
                 badge={t('common.fixed')}
                 check={{ on: false, onToggle: () => toggleFixed(e.item) }}
                 onPress={() => openAdjust(e.item)}
               />
-            ),
-          )}
+            );
+          })}
         </Card>
       )}
 

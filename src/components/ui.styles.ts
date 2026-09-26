@@ -104,7 +104,9 @@ export const styles = StyleSheet.create({
     gap: 4,
   },
 
-  backdrop: { flex: 1, backgroundColor: C.backdrop },
+  // El fondo cubre toda la pantalla, también detrás de la hoja, que se apoya abajo.
+  sheetWrap: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: C.backdrop },
   sheet: {
     maxHeight: '85%',
     backgroundColor: C.bg,
