@@ -761,6 +761,12 @@ export const es = {
 
   settings: {
     title: 'Ajustes',
+    tabs: {
+      fechas: 'Fechas',
+      avisos: 'Avisos',
+      general: 'General',
+      datos: 'Datos',
+    },
     lock: {
       unavailableTitle: 'No disponible',
       unavailableText: 'Configura una huella, rostro o PIN en tu teléfono para usar el bloqueo.',
