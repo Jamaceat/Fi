@@ -358,6 +358,14 @@ export async function listSegments(db: SQLiteDatabase) {
   return map;
 }
 
+/** Recordatorio de un fijo. No es parte de sus fechas, así que no crea tramos. */
+export const setFixedReminder = (db: SQLiteDatabase, id: number, remind: boolean, days: number) =>
+  db.runAsync('UPDATE fixed SET remind = ?, remind_days = ? WHERE id = ?', remind ? 1 : 0, days, id);
+
+/** Enciende o apaga el recordatorio de todos los fijos activos. */
+export const setAllFixedReminders = (db: SQLiteDatabase, remind: boolean) =>
+  db.runAsync('UPDATE fixed SET remind = ? WHERE active = 1', remind ? 1 : 0);
+
 /** Deja de repetirse; los pagos ya registrados se conservan. */
 export const endFixed = (db: SQLiteDatabase, id: number) =>
   db.runAsync('UPDATE fixed SET active = 0, end_date = ? WHERE id = ?', todayISO(), id);

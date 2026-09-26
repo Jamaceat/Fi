@@ -7,13 +7,12 @@ import {
   Manrope_800ExtraBold,
 } from '@expo-google-fonts/manrope';
 import { useFonts } from 'expo-font';
-import * as Notifications from 'expo-notifications';
 import { router, Stack, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Alert, Platform, View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { PrimaryButton, T } from '@/components/ui';
@@ -23,14 +22,14 @@ import { t } from '@/i18n';
 import { authenticate, canLock } from '@/lib/auth';
 import { restoreBackupIfEmpty } from '@/lib/backup';
 import { longDate, toISO } from '@/lib/dates';
-import { setupNotifications } from '@/lib/notifications';
+import { listenNotificationOpens, setupNotifications } from '@/lib/notifications';
 import { AppProvider, useApp } from '@/state/app';
 import { styles as st } from '@/styles/screens/root-layout.styles';
 
 SplashScreen.preventAutoHideAsync();
 setupNotifications();
 
-// Al abrir directo en /nuevo (p. ej. desde el botón de ajustes rápidos), "atrás" vuelve a las pestañas.
+// Al abrir directo en /nuevo o /notificaciones (p. ej. desde los ajustes rápidos), "atrás" vuelve a las pestañas.
 export const unstable_settings = { initialRouteName: '(tabs)' };
 
 /** Migra la base y, si está vacía, la recupera del respaldo automático (si existe). */
@@ -77,6 +76,7 @@ export default function RootLayout() {
               <Stack.Screen name="calendario" options={{ animation: 'fade_from_bottom' }} />
               <Stack.Screen name="fijo/[id]" />
               <Stack.Screen name="orden-inicio" />
+              <Stack.Screen name="notificaciones" />
             </Stack>
             <NotificationRouter />
           </LockGate>
@@ -88,20 +88,7 @@ export default function RootLayout() {
 
 /** Al tocar un aviso del teléfono abre la pantalla que indica (también si abrió la app). */
 function NotificationRouter() {
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const open = (n: Notifications.Notification) => {
-      const url = n.request.content.data?.url;
-      if (typeof url === 'string') router.navigate(url as Href);
-    };
-    const last = Notifications.getLastNotificationResponse();
-    if (last) {
-      open(last.notification);
-      Notifications.clearLastNotificationResponse();
-    }
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => open(r.notification));
-    return () => sub.remove();
-  }, []);
+  useEffect(() => listenNotificationOpens((url) => router.navigate(url as Href)), []);
   return null;
 }
 

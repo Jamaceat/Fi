@@ -20,6 +20,7 @@ import { LoadingBackdrop } from '@/components/loading-backdrop';
 import { MonthPicker } from '@/components/month-picker';
 import {
   IconBars,
+  IconBell,
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
@@ -466,7 +467,17 @@ function MonthDeck({ data, revealed, onReveal }: { data: HomeData; revealed: boo
               {t('home.shortcuts.unconfirmed')}
             </T>
           </Tap>
-          <View style={st.shortcut} />
+          <Tap
+            onPress={() => router.push('/notificaciones')}
+            style={st.shortcut}
+            accessibilityLabel={t('home.shortcuts.open', { name: t('home.shortcuts.notifications') })}>
+            <View style={[common.iconTile, st.shortcutIcon, st.notificationsIcon]}>
+              <IconBell size={22} color={C.in} />
+            </View>
+            <T w={700} size={12.5} numberOfLines={1}>
+              {t('home.shortcuts.notifications')}
+            </T>
+          </Tap>
           <View style={st.shortcut} />
           <View style={st.shortcut} />
         </Row>

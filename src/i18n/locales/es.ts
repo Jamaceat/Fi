@@ -179,6 +179,7 @@ export const es = {
       fixed: 'Fijos',
       months: 'Meses',
       unconfirmed: 'Sin confirmar',
+      notifications: 'Avisos',
     },
     savings: {
       open: 'Abrir ahorro',
@@ -920,8 +921,10 @@ export const es = {
     },
     alerts: {
       title: 'Avisos y alertas',
-      remindFixed: 'Recordar pagos fijos',
-      remindFixedText: 'Usa la anticipación que definas en cada fijo.',
+      open: 'Configurar notificaciones',
+      openText: 'Recordatorios de fijos, resumen semanal, hora y alerta de gasto, todo en un lugar.',
+      tileTip:
+        'En Android también puedes abrirla desde los ajustes rápidos: edita el panel y agrega el botón "Notificaciones".',
       budget: 'Alerta de gasto del mes',
       budgetText: 'Te avisa en Inicio cuando tus gastos se acercan a tus ingresos.',
       budgetAt: 'Avisar al gastar el',
@@ -930,7 +933,6 @@ export const es = {
       percentUp: 'Subir porcentaje',
       weekly: 'Resumen semanal',
       weeklyText: 'Cada lunes: lo que gastaste y lo que viene.',
-      hour: 'Hora de los avisos',
       hours: {
         morning: '7:00 a. m.',
         noon: '12:00 m.',
@@ -1070,7 +1072,7 @@ export const es = {
     blocks: {
       hero: { title: 'Balance del mes', desc: 'Disponible, ingresos y gastos' },
       fund: { title: 'Fondo total', desc: 'Disponible sumando todos los meses, sin lo ahorrado' },
-      shortcuts: { title: 'Accesos rápidos', desc: 'Ahorro, calendario, fijos, meses y sin confirmar' },
+      shortcuts: { title: 'Accesos rápidos', desc: 'Ahorro, calendario, fijos, meses, sin confirmar y avisos' },
       savings: { title: 'Ahorro total', desc: 'Saldo y lo ahorrado este mes' },
       pending: { title: 'Ingreso fijo pendiente', desc: 'Solo aparece si falta uno por recibir' },
       calendar: { title: 'Calendario', desc: 'Pagos y festivos del mes' },
@@ -1152,5 +1154,82 @@ export const es = {
       text: 'Mis finanzas no tiene permiso para mostrar notificaciones. Actívalo en los ajustes del teléfono para recibir los avisos.',
       open: 'Abrir ajustes',
     },
+    test: {
+      title: '¡Así se ven tus avisos!',
+      body: 'Las notificaciones de Mis finanzas están funcionando.',
+    },
+  },
+
+  notificationSettings: {
+    title: 'Notificaciones',
+    intro: 'Elige qué avisos quieres recibir en tu teléfono y a qué hora. Los cambios se guardan solos.',
+    status: {
+      granted: {
+        title: 'Avisos activos',
+        scheduled_one: '{{count}} aviso programado · el próximo {{when}}.',
+        scheduled_other: '{{count}} avisos programados · el próximo {{when}}.',
+        nothing: 'No hay avisos programados por ahora. Aparecen cuando se acerca un pago.',
+        allOff: 'Todos los avisos están apagados. Enciende abajo los que quieras recibir.',
+        test: 'Enviar aviso de prueba',
+        testSent: 'Aviso de prueba enviado',
+        testSentText: 'Llega en unos segundos. Si no lo ves, revisa el modo No molestar del teléfono.',
+      },
+      ask: {
+        title: 'Falta tu permiso',
+        text: 'Para recibir avisos en el teléfono, permite que Mis finanzas muestre notificaciones.',
+        action: 'Permitir notificaciones',
+      },
+      blocked: {
+        title: 'Notificaciones bloqueadas',
+        text: 'El teléfono no deja que Mis finanzas te avise. Actívalas en los ajustes del teléfono y vuelve aquí.',
+        action: 'Abrir ajustes del teléfono',
+      },
+      unsupported: {
+        title: 'Avisos no disponibles aquí',
+        text: 'Las notificaciones no funcionan en la web ni en Expo Go para Android. Instala la app (build de desarrollo o final) para recibirlas. Lo que configures abajo se guarda igual.',
+      },
+    },
+    fixed: {
+      title: 'Pagos e ingresos fijos',
+      text: 'Te recordamos antes de cada fecha para que no se te pase.',
+      master: 'Recordar fijos',
+      masterText: 'Interruptor general de todos los recordatorios de fijos.',
+      each: 'Elige cuáles',
+      allOn: 'Activar todos',
+      allOff: 'Apagar todos',
+      countOn: '{{on}} de {{total}} con recordatorio',
+      off: 'Enciéndelo para elegir qué fijos te avisan y con cuánta anticipación.',
+      empty: 'Aún no tienes fijos',
+      emptyHint: 'Cuando crees un gasto o ingreso fijo, aquí eliges si quieres que te avisemos.',
+      notifyOn: 'Aviso {{when}}',
+      dueOn: {
+        gasto: 'pago {{when}}',
+        ingreso: 'llega {{when}}',
+      },
+      noReminder: 'Sin recordatorio',
+      noDates: 'Sin fechas próximas',
+      remindWith: 'Avisar con',
+    },
+    weekly: {
+      title: 'Resumen semanal',
+      next: 'El próximo llega {{when}}.',
+    },
+    hour: {
+      title: 'Hora de los avisos',
+      text: 'Todos los avisos llegan a esta hora.',
+    },
+    inApp: {
+      title: 'Dentro de la app',
+      text: 'Esta alerta se muestra en Inicio; no llega como notificación.',
+    },
+    upcoming: {
+      title: 'Próximos avisos',
+      text: 'Así te van a llegar, en orden.',
+      showAll: 'Ver todos ({{count}})',
+      showLess: 'Ver menos',
+    },
+    /** "hoy, 7:00 a. m." / "el mié 1 oct, 7:00 a. m." */
+    at: '{{day}}, {{hour}}',
+    on: 'el {{weekday}} {{date}}',
   },
 };

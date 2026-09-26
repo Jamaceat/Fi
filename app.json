@@ -47,7 +47,15 @@
           "color": "#1D5C8C"
         }
       ],
-      ["./plugins/with-quick-tile.js", { "label": "Nuevo movimiento" }]
+      [
+        "./plugins/with-quick-tile.js",
+        {
+          "tiles": [
+            { "name": "NewMovement", "label": "Nuevo movimiento", "path": "nuevo", "icon": "plus" },
+            { "name": "Notifications", "label": "Notificaciones", "path": "notificaciones", "icon": "bell" }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

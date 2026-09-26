@@ -23,6 +23,7 @@ export const styles = StyleSheet.create({
   shortcut: { flex: 1, alignItems: 'center', gap: 8 },
   shortcutIcon: { width: 48, height: 48, borderRadius: 16 },
   unconfirmedIcon: { backgroundColor: C.outSoft },
+  notificationsIcon: { backgroundColor: C.inSoft },
   /** Contador de sin confirmar sobre el ícono. */
   badge: {
     position: 'absolute',

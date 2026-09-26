@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Alert, Linking, View } from 'react-native';
+import { Alert, Platform, View } from 'react-native';
 
 import {
+  IconBell,
   IconCalendar,
   IconChevronDown,
   IconChevronRight,
@@ -29,7 +30,6 @@ import {
   Tap,
   Toast,
 } from '@/components/ui';
-import { clearOption, useSlidingHighlight } from '@/components/sliding-highlight';
 import { UnitBar } from '@/components/unit-bar';
 import { C } from '@/constants/theme';
 import { wipeData, type DefaultPeriod, type Settings } from '@/db/repo';
@@ -38,7 +38,6 @@ import { authenticate, canLock } from '@/lib/auth';
 import { clampDay, fromISO, fullDate, lastDayOfMonth, longDate, realTodayISO, todayISO, toISO } from '@/lib/dates';
 import { pickBackup, shareBackup, type Backup } from '@/lib/backup';
 import { exportCsv } from '@/lib/export';
-import { notificationsAllowed } from '@/lib/notifications';
 import { describePreset, presetName, PRESETS, type HolidayRule, type Kind, type Preset } from '@/lib/schedule';
 import { useApp } from '@/state/app';
 import { common, layout } from '@/styles/common';
@@ -51,15 +50,6 @@ const BACKUP_DAYS = [1, 3, 7, 15, 30] as const;
 const PRESET_OPTS: Preset[] = [...PRESETS.map((p) => p.id), 'custom'];
 
 const HOLIDAY_RULES: HolidayRule[] = ['mantener', 'antes', 'despues'];
-
-/** Hora guardada → clave de su etiqueta. */
-const HOURS = [
-  ['7:00', 'morning'],
-  ['12:00', 'noon'],
-  ['19:00', 'evening'],
-] as const;
-
-const HOUR_IDS = HOURS.map(([id]) => id);
 
 const KINDS: Kind[] = ['gasto', 'ingreso'];
 
@@ -92,21 +82,10 @@ export default function Ajustes() {
   const [wiping, setWiping] = useState(false);
   const [wipeText, setWipeText] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
-  const hourHl = useSlidingHighlight({ keys: HOUR_IDS, selected: s.hour, color: C.inSoft, border: C.in });
 
   const setDef = (kind: Kind, patch: Partial<DefaultPeriod>) =>
     updateSettings({ defs: { ...s.defs, [kind]: { ...s.defs[kind], ...patch } } });
   const toggle = (key: keyof Settings) => updateSettings({ [key]: !s[key] });
-
-  /** Al encender un aviso del teléfono se pide el permiso; si está negado, se ofrece abrir los ajustes. */
-  const toggleAlert = async (key: 'remindFijos' | 'weekly') => {
-    toggle(key);
-    if (s[key] || (await notificationsAllowed(true))) return;
-    Alert.alert(t('notifications.denied.title'), t('notifications.denied.text'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('notifications.denied.open'), onPress: () => Linking.openSettings() },
-    ]);
-  };
 
   const toggleLock = async () => {
     if (s.lock) return updateSettings({ lock: false });
@@ -413,71 +392,25 @@ export default function Ajustes() {
           <T w={800} size={16}>
             {t('settings.alerts.title')}
           </T>
-          <View style={[common.box, common.boxPadded]}>
-            <SwitchRow
-              first
-              label={t('settings.alerts.remindFixed')}
-              desc={t('settings.alerts.remindFixedText')}
-              help={t('settings.help.remindFixed')}
-              on={s.remindFijos}
-              onPress={() => toggleAlert('remindFijos')}
-            />
-            <SwitchRow
-              label={t('settings.alerts.budget')}
-              desc={t('settings.alerts.budgetText')}
-              help={t('settings.help.budget')}
-              on={s.budgetAlert}
-              onPress={() => toggle('budgetAlert')}
-            />
-            {s.budgetAlert && (
-              <Row style={[common.divider, st.settingRowCompact]}>
-                <Label
-                  text={t('settings.alerts.budgetAt')}
-                  help={t('settings.help.budgetAt')}
-                  w={700}
-                  size={14.5}
-                  style={layout.fill}
-                />
-                <Stepper
-                  minWidth={56}
-                  value={t('settings.alerts.percent', { pct: s.budget })}
-                  onDec={() => updateSettings({ budget: Math.max(50, s.budget - 5) })}
-                  onInc={() => updateSettings({ budget: Math.min(100, s.budget + 5) })}
-                  decLabel={t('settings.alerts.percentDown')}
-                  incLabel={t('settings.alerts.percentUp')}
-                />
-              </Row>
-            )}
-            <SwitchRow
-              label={t('settings.alerts.weekly')}
-              desc={t('settings.alerts.weeklyText')}
-              help={t('settings.help.weekly')}
-              on={s.weekly}
-              onPress={() => toggleAlert('weekly')}
-            />
-            <View style={[common.divider, st.radioGroup]}>
-              <Label text={t('settings.alerts.hour')} help={t('settings.help.hour')} w={700} size={14.5} />
-              <Row gap={8}>
-                {hourHl.layer({ base: [st.hourPlate, st.radioOff], style: st.hourPlate })}
-                {HOURS.map(([id, key]) => {
-                  const sel = s.hour === id;
-                  return (
-                    <Tap
-                      key={id}
-                      onPress={() => updateSettings({ hour: id })}
-                      onLayout={hourHl.measure(id)}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: sel }}
-                      style={[st.hour, hourHl.ready ? clearOption : sel ? st.radioOn : st.radioOff]}>
-                      <T w={700} size={13} color={sel ? C.inDark : C.ink}>
-                        {t(`settings.alerts.hours.${key}`)}
-                      </T>
-                    </Tap>
-                  );
-                })}
-              </Row>
+          <Tap onPress={() => router.push('/notificaciones')} style={[common.box, st.defRow]} accessibilityRole="button">
+            <View style={[st.defIcon, st.defIconIn]}>
+              <IconBell color={C.inDark} />
             </View>
-          </View>
+            <Stack gap={1} style={layout.fill}>
+              <T w={700} size={14.5}>
+                {t('settings.alerts.open')}
+              </T>
+              <T w={600} size={12.5} color={C.muted}>
+                {t('settings.alerts.openText')}
+              </T>
+            </Stack>
+            <IconChevronRight size={16} color={C.faint} />
+          </Tap>
+          {Platform.OS === 'android' && (
+            <T size={12.5} color={C.muted} style={common.bodyText}>
+              {t('settings.alerts.tileTip')}
+            </T>
+          )}
         </Stack>
       )}
 

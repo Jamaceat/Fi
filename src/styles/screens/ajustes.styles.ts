@@ -35,7 +35,4 @@ export const styles = StyleSheet.create({
   },
   radioOn: { backgroundColor: C.inSoft, borderColor: C.in },
   radioOff: { backgroundColor: C.card, borderColor: C.line },
-  hour: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  /** Forma de cada hora, para su fondo y el que se desliza. */
-  hourPlate: { borderRadius: 12, borderWidth: 1 },
 });
