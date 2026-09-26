@@ -25,7 +25,7 @@ import {
 } from '@/lib/dates';
 import type { FixedItem } from '@/lib/finance';
 import { APPROX, fmt, fmtFlow, joinMeta } from '@/lib/format';
-import { movementBadge } from '@/lib/labels';
+import { movementBadge, openMovement } from '@/lib/labels';
 import { describeSchedule } from '@/lib/schedule';
 import { useApp, useLoad } from '@/state/app';
 import { common, layout } from '@/styles/common';
@@ -512,7 +512,7 @@ function DayDetail({
               amount={fmtFlow(m.amount, m.type === 'ingreso')}
               income={m.type === 'ingreso'}
               badge={movementBadge(m)}
-              onPress={() => router.push({ pathname: '/nuevo', params: { id: String(m.id) } })}
+              onPress={() => openMovement(m)}
             />
           ))}
           <Row gap={16} style={[common.divider, st.totals]}>

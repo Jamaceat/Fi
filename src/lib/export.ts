@@ -37,7 +37,11 @@ export async function exportCsv(db: SQLiteDatabase) {
   ];
   for (const m of movs) {
     const detail =
-      m.fixed_id != null ? t('export.fixedDetail', { name: fixedName.get(m.fixed_id) ?? '' }) : t('export.occasional');
+      m.fixed_id != null
+        ? t('export.fixedDetail', { name: fixedName.get(m.fixed_id) ?? '' })
+        : m.savings_id != null
+          ? t('export.savingsDetail')
+          : t('export.occasional');
     rows.push(
       line([
         t('export.records.movement'),

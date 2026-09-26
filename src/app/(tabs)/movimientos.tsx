@@ -39,7 +39,7 @@ import { longDate, periodLabel, shortDate } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
 import { canPay } from '@/lib/fund';
 import { APPROX, cleanAmount, dots, fmt, fmtFlow, joinMeta, signed } from '@/lib/format';
-import { movementBadge } from '@/lib/labels';
+import { movementBadge, openMovement } from '@/lib/labels';
 import type { Kind } from '@/lib/schedule';
 import { useApp, useLoad } from '@/state/app';
 import { common, layout } from '@/styles/common';
@@ -131,6 +131,8 @@ export default function Movimientos() {
 
   // Desmarcar un fijo borra su movimiento y la ocurrencia vuelve a quedar pendiente.
   const toggleMovement = async (m: Movement) => {
+    // Los del ahorro siempre están confirmados: se deshacen desde Ahorro.
+    if (m.savings_id != null) return openMovement(m);
     if (m.fixed_id != null && m.fixed_due) await unmark(db, m.fixed_id, m.fixed_due);
     else {
       if (!m.paid && m.type === 'gasto' && !(await canPay(db, m.amount))) return;
@@ -220,7 +222,7 @@ export default function Movimientos() {
                 income={income}
                 badge={movementBadge(e.mov)}
                 check={{ on: !!e.mov.paid, onToggle: () => toggleMovement(e.mov) }}
-                onPress={() => (e.mov.fixed_id != null ? setPicked(e.mov) : editMovement(e.mov))}
+                onPress={() => (e.mov.fixed_id != null ? setPicked(e.mov) : openMovement(e.mov))}
               />
             ) : (
               <MovementRow

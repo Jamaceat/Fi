@@ -1,7 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { fillSavingsMovements } from './repo';
+
 export const DB_NAME = 'finanzas.db';
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 10;
 
 /**
  * Crea el movimiento de los fijos pagados/recibidos que no lo tienen (antes se podía apagar
@@ -218,6 +220,21 @@ DROP TABLE savings_entries;
 ALTER TABLE savings_entries_v8 RENAME TO savings_entries;
 `);
     version = 8;
+  }
+
+  // v9 agrega movements.savings_id. v10 repite el paso para las bases que quedaron marcadas
+  // como v9 sin la columna (una versión intermedia subió el número sin migrar).
+  if (version === 8 || version === 9) {
+    // Solo se agrega si falta: un intento anterior pudo cortarse después del ALTER.
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(movements)');
+    if (!cols.some((c) => c.name === 'savings_id')) {
+      await db.execAsync(`
+-- Movimiento confirmado que refleja un registro del ahorro (aporte, retiro o aporte a meta).
+ALTER TABLE movements ADD COLUMN savings_id INTEGER;
+`);
+    }
+    await fillSavingsMovements(db);
+    version = 10;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

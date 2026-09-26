@@ -33,6 +33,7 @@ export const es = {
     paid: 'Pagado',
     pending: 'Pendiente',
     received: 'Recibido',
+    savings: 'Ahorro',
     saveChanges: 'Guardar cambios',
     toReceive: 'Por recibir',
     today: 'Hoy',
@@ -551,7 +552,14 @@ export const es = {
     deleteGoal: {
       title: '¿Eliminar la meta {{name}}?',
       text: 'Se borra la meta y su progreso.',
-      textRefund: 'Se borra la meta y su progreso. Lo apartado ({{amount}}) vuelve al fondo total.',
+      textRefund: 'Se borran la meta, su progreso y los movimientos de sus aportes. Lo apartado ({{amount}}) vuelve al fondo total.',
+    },
+    /** Movimiento confirmado que se crea al mover dinero entre el fondo total y el ahorro. */
+    movement: {
+      category: 'Ahorro',
+      add: 'Pasado al ahorro',
+      withdraw: 'Retiro del ahorro',
+      goal: 'Aporte a {{name}}',
     },
     preview: {
       typeBalance: 'Escribe tu saldo para comparar',
@@ -619,6 +627,7 @@ export const es = {
       recordedOn: 'Registrado el {{date}}',
       fundAvailable: 'Disponible en el fondo total: {{amount}}',
       fundShort: 'Fondo: {{amount}}',
+      fundTotal: 'Disponible en el fondo total',
       useAll: 'Todo',
       startNow: 'Aportar ahora',
       startLabel: 'Aporte inicial',
@@ -1048,6 +1057,7 @@ export const es = {
     },
     fixedDetail: 'Fijo: {{name}}',
     occasional: 'Ocasional',
+    savingsDetail: 'Ahorro',
     extraordinarySuffix: ' (extraordinario)',
     deletedSuffix: ' (eliminado {{date}})',
     variableAmount: 'monto variable',

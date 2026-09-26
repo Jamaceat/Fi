@@ -2,6 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { fillSavingsMovements } from '@/db/repo';
 import { FILL_FIXED_MOVEMENTS } from '@/db/schema';
 import { t } from '@/i18n';
 
@@ -236,6 +237,7 @@ async function restore(db: SQLiteDatabase, backup: Backup) {
       }
     }
     await db.execAsync(FILL_FIXED_MOVEMENTS);
+    await fillSavingsMovements(db);
   });
 }
 

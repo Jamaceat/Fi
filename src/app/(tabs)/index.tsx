@@ -67,6 +67,7 @@ import { fixedItems, sum } from '@/lib/finance';
 import type { HolidayMap } from '@/lib/holidays';
 import type { HolidayRule } from '@/lib/schedule';
 import { fmt, fmtBalance, fmtFlow, joinMeta, MASKED_AMOUNT, signed } from '@/lib/format';
+import { openMovement } from '@/lib/labels';
 import { unconfirmedOf } from '@/lib/unconfirmed';
 import { useApp, useLoad } from '@/state/app';
 import { common, layout } from '@/styles/common';
@@ -101,9 +102,15 @@ const SHORTCUTS = [
 /** Segunda fila: abre Meses con la lista de sin confirmar abierta. */
 const openUnconfirmed = () => router.navigate({ pathname: '/historial', params: { pending: '1' } });
 
-/** "Fijo", "Ocasional" o "Pendiente". */
+/** "Fijo", "Ahorro", "Ocasional" o "Pendiente". */
 const movementKind = (m: Movement) =>
-  m.fixed_id != null ? t('common.fixed') : m.paid ? t('common.occasional') : t('common.pending');
+  m.fixed_id != null
+    ? t('common.fixed')
+    : m.savings_id != null
+      ? t('common.savings')
+      : m.paid
+        ? t('common.occasional')
+        : t('common.pending');
 
 type HomeData = {
   movs: Movement[];
@@ -588,7 +595,7 @@ function MonthDeck({ data, revealed, onReveal }: { data: HomeData; revealed: boo
                   meta={joinMeta(movementKind(m), shortDate(m.date))}
                   amount={hide ? MASKED_AMOUNT : fmtFlow(m.amount, m.type === 'ingreso')}
                   income={m.type === 'ingreso'}
-                  onPress={() => router.push({ pathname: '/nuevo', params: { id: String(m.id) } })}
+                  onPress={() => openMovement(m)}
                 />
               </Animated.View>
             ))

@@ -551,7 +551,9 @@ export default function Ahorro() {
       <AmountDialog
         visible={startOpen}
         title={t('savings.sheet.startNow')}
-        hint={`${t('savings.sheet.startHint')} ${t('savings.sheet.fundAvailable', { amount: fmt(fund) })}`}
+        hint={t('savings.sheet.startHint')}
+        refLabel={t('savings.sheet.fundTotal')}
+        refValue={fmt(fund)}
         initial={start}
         max={fundAvailable}
         overText={t('savings.preview.notEnough')}

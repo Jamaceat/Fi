@@ -9,7 +9,7 @@ import { layout } from '@/styles/common';
 
 import { styles as s } from './amount-dialog.styles';
 import { AmountField } from './amount-field';
-import { Stack, T, Tap } from './ui';
+import { Row, Stack, T, Tap } from './ui';
 import { useKeyboardHeight } from './use-keyboard-height';
 
 const IN = FadeIn.duration(220).easing(Easing.out(Easing.cubic));
@@ -17,11 +17,14 @@ const IN = FadeIn.duration(220).easing(Easing.out(Easing.cubic));
 /**
  * Diálogo centrado sobre un fondo oscuro para escribir un monto y aceptarlo.
  * `max` = tope permitido: pasarse lo muestra en rojo con `overText` y bloquea Aceptar.
+ * `refLabel`/`refValue` = tarjeta de referencia (p. ej. el saldo del que sale el monto).
  */
 export function AmountDialog({
   visible,
   title,
   hint,
+  refLabel,
+  refValue,
   initial = 0,
   max,
   overText,
@@ -32,6 +35,8 @@ export function AmountDialog({
   visible: boolean;
   title: string;
   hint?: string;
+  refLabel?: string;
+  refValue?: string;
   initial?: number;
   max?: number;
   overText?: string;
@@ -72,6 +77,16 @@ export function AmountDialog({
                 </T>
               )}
             </Stack>
+            {!!refLabel && (
+              <Row gap={12} style={s.ref}>
+                <T w={700} size={13} style={layout.fill}>
+                  {refLabel}
+                </T>
+                <T w={800} size={16} tabular>
+                  {refValue}
+                </T>
+              </Row>
+            )}
             <View style={s.amountBox}>
               <AmountField size={36} autoFocus value={dots(input)} onChangeText={(text) => setInput(cleanAmount(text))} color={C.inDark} />
             </View>
