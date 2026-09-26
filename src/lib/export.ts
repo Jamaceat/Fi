@@ -65,13 +65,20 @@ export async function exportCsv(db: SQLiteDatabase) {
       ]),
     );
   }
+  const goalName = new Map(goals.map((g) => [g.id, g.name]));
+  const savingsKind = {
+    add: t('export.savingsAdd'),
+    update: t('export.savingsUpdate'),
+    withdraw: t('export.savingsWithdraw'),
+    goal: t('export.savingsGoal'),
+  };
   for (const e of [...savings].reverse()) {
     rows.push(
       line([
         t('export.records.savings'),
         e.date,
-        e.kind === 'add' ? t('export.savingsAdd') : t('export.savingsUpdate'),
-        '',
+        savingsKind[e.kind],
+        e.goal_id != null ? (goalName.get(e.goal_id) ?? '') : '',
         '',
         e.delta,
         t('export.balance', { amount: e.after }),

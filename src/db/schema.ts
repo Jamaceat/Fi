@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'finanzas.db';
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 /**
  * Crea el movimiento de los fijos pagados/recibidos que no lo tienen (antes se podía apagar
@@ -199,6 +199,25 @@ ALTER TABLE movements ADD COLUMN paid INTEGER NOT NULL DEFAULT 1;
     // auto_move queda sin uso: un fijo pagado/recibido siempre tiene su movimiento.
     await db.execAsync(FILL_FIXED_MOVEMENTS);
     version = 7;
+  }
+
+  if (version === 7) {
+    await db.execAsync(`
+-- Nuevos registros de ahorro: retiro al fondo total ('withdraw') y aporte a una meta ('goal', con goal_id).
+-- after = saldo libre del ahorro (sin lo bloqueado en metas) después del registro.
+CREATE TABLE savings_entries_v8 (
+  id INTEGER PRIMARY KEY NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('add','update','withdraw','goal')),
+  date TEXT NOT NULL,
+  delta INTEGER NOT NULL,
+  after INTEGER NOT NULL,
+  goal_id INTEGER
+);
+INSERT INTO savings_entries_v8 (id, kind, date, delta, after) SELECT id, kind, date, delta, after FROM savings_entries;
+DROP TABLE savings_entries;
+ALTER TABLE savings_entries_v8 RENAME TO savings_entries;
+`);
+    version = 8;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -26,6 +26,8 @@ export const C = {
   shadow: '#000000',
   backdrop: 'rgba(27,26,23,0.42)',
   backdropDark: 'rgba(0,0,0,0.45)',
+  /** Fondo detrás de un diálogo centrado: casi negro, para que solo se vea el diálogo. */
+  dialogBackdrop: 'rgba(0,0,0,0.78)',
   glass: 'rgba(255,255,255,0.14)',
   glassStrong: '#FFFFFFAA',
 
@@ -74,6 +76,18 @@ export const C = {
   outTrack: '#F1ECE4',
   switchOff: '#CFC9BF',
 } as const;
+
+/**
+ * Colores de las metas (barra del ahorro total y tarjetas). Se leen bien sobre el azul del ahorro
+ * y sobre blanco. El libre usa C.inText.
+ */
+export const GOAL_COLORS = ['#E0A43A', '#4FB08A', '#D9709A', '#9C84DD', '#46AFC0', '#C98A5A'] as const;
+
+/** Color fijo de una meta según su id (no cambia al borrar otras). */
+export const goalColor = (id: number) => GOAL_COLORS[Math.abs(id - 1) % GOAL_COLORS.length];
+
+/** Fondo suave del ícono de una meta: su color con transparencia. */
+export const goalSoft = (id: number) => `${goalColor(id)}26`;
 
 export const F = {
   serif500: 'Fraunces_500Medium',

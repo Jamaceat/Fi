@@ -37,6 +37,7 @@ import {
 import { t } from '@/i18n';
 import { longDate, periodLabel, shortDate } from '@/lib/dates';
 import { fixedItems, sum, type FixedItem } from '@/lib/finance';
+import { canPay } from '@/lib/fund';
 import { APPROX, cleanAmount, dots, fmt, fmtFlow, joinMeta, signed } from '@/lib/format';
 import { movementBadge } from '@/lib/labels';
 import type { Kind } from '@/lib/schedule';
@@ -61,7 +62,7 @@ export default function Movimientos() {
   const db = useSQLiteContext();
   const { period, range, settings, bump, holidays } = useApp();
   const params = useLocalSearchParams<{ tab?: string; filter?: string }>();
-  const [tab, setTab] = useState<Tab>('gasto');
+  const [tab, setTab] = useState<Tab>('todos');
   const [filter, setFilter] = useState<Filter>('todos');
   const [lastParams, setLastParams] = useState('');
   // Movimiento fijo tocado: abre el selector calendario / editar.
@@ -112,6 +113,8 @@ export default function Movimientos() {
       setConfirming({ item, input: String(item.amount) });
       return;
     }
+    // Un gasto solo se paga con lo que hay en el fondo total; si no alcanza, sigue pendiente.
+    if (item.fixed.type === 'gasto' && !(await canPay(db, item.amount))) return;
     await markPaid(db, item.fixed, item.occ.due, { amount: item.amount, date: item.occ.date });
     bump();
   };
@@ -120,6 +123,7 @@ export default function Movimientos() {
     if (!confirming) return;
     const amount = Number(confirming.input) || 0;
     if (amount <= 0) return;
+    if (confirming.item.fixed.type === 'gasto' && !(await canPay(db, amount))) return;
     await markPaid(db, confirming.item.fixed, confirming.item.occ.due, { amount, date: confirming.item.occ.date });
     setConfirming(null);
     bump();
@@ -128,7 +132,10 @@ export default function Movimientos() {
   // Desmarcar un fijo borra su movimiento y la ocurrencia vuelve a quedar pendiente.
   const toggleMovement = async (m: Movement) => {
     if (m.fixed_id != null && m.fixed_due) await unmark(db, m.fixed_id, m.fixed_due);
-    else await setMovementPaid(db, m.id, !m.paid);
+    else {
+      if (!m.paid && m.type === 'gasto' && !(await canPay(db, m.amount))) return;
+      await setMovementPaid(db, m.id, !m.paid);
+    }
     bump();
   };
 

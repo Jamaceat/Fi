@@ -1,16 +1,28 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { IconArrowDown, IconArrowUp, IconCheck, IconPending, IconTrash } from '@/components/icons';
 import { Card, Header, Row, Screen, Sheet, Stack, T, Tap } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, loadFixedData, markPaid, skipOccurrence, unmark, type Fixed } from '@/db/repo';
+import {
+  confirmMovement,
+  deleteMovement,
+  listMovements,
+  listUnpaidBefore,
+  loadFixedData,
+  markPaid,
+  skipOccurrence,
+  unmark,
+  type Fixed,
+} from '@/db/repo';
 import { t } from '@/i18n';
 import { monthAbbr, monthName, periodOf, periodRange, samePeriod, shiftPeriod, type Period } from '@/lib/dates';
-import { fixedItems, sum, type FixedItem } from '@/lib/finance';
+import { sum } from '@/lib/finance';
+import { canPay } from '@/lib/fund';
 import { fmt, fmtFlow, joinMeta, signed } from '@/lib/format';
+import { unconfirmedOf, type Unconfirmed } from '@/lib/unconfirmed';
 import { useApp, useLoad } from '@/state/app';
 import { common, layout } from '@/styles/common';
 import { styles as st } from '@/styles/screens/historial.styles';
@@ -25,35 +37,51 @@ type MonthAgg = {
   outExtra: number;
   inPend: number;
   outPend: number;
-  pending: FixedItem[];
+  pending: Unconfirmed[];
 };
 
 export default function Historial() {
   const db = useSQLiteContext();
   const { currentPeriod, settings, setPeriod, bump, holidays } = useApp();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const params = useLocalSearchParams<{ pending?: string }>();
+
+  // Inicio abre la lista de sin confirmar con ?pending=1; se aplica una vez y se limpia.
+  const [lastPending, setLastPending] = useState<string | undefined>(undefined);
+  if (params.pending !== lastPending) {
+    setLastPending(params.pending);
+    if (params.pending === '1') setSheetOpen(true);
+  }
+  useEffect(() => {
+    if (params.pending) router.setParams({ pending: undefined });
+  }, [params.pending]);
 
   const data = useLoad(
     async (d) => {
       const periods = [-5, -4, -3, -2, -1, 0].map((k) => shiftPeriod(currentPeriod, k));
       const first = periodRange(periods[0], settings.monthStart);
       const last = periodRange(periods[5], settings.monthStart);
-      const [movs, fixedData] = await Promise.all([listMovements(d, first.from, last.to), loadFixedData(d)]);
+      const [movs, fixedData, unpaid] = await Promise.all([
+        listMovements(d, first.from, last.to),
+        loadFixedData(d),
+        listUnpaidBefore(d, last.from),
+      ]);
+      // Sin confirmar: todo lo de meses ya cerrados, no solo de los 5 que muestra la gráfica.
+      const unconfirmed = unconfirmedOf(fixedData, unpaid, last.from, settings.holiday, holidays);
 
-      const months: MonthAgg[] = periods.map((p, i) => {
+      const months: MonthAgg[] = periods.map((p) => {
         const { from, to } = periodRange(p, settings.monthStart);
         const ms = movs.filter((m) => m.date >= from && m.date < to && m.paid);
         const pick = (type: string, extra: number) => sum(ms.filter((m) => m.type === type && m.extraordinary === extra));
-        // Los fijos sin confirmar solo cuentan en meses ya cerrados.
-        const pending = i < 5 ? fixedItems(fixedData, from, to, settings.holiday, holidays).filter((x) => !x.paid) : [];
+        const pending = unconfirmed.filter((x) => x.date >= from && x.date < to);
         return {
           period: p,
           inc: pick('ingreso', 0),
           out: pick('gasto', 0),
           inExtra: pick('ingreso', 1),
           outExtra: pick('gasto', 1),
-          inPend: sum(pending.filter((x) => x.fixed.type === 'ingreso')),
-          outPend: sum(pending.filter((x) => x.fixed.type === 'gasto')),
+          inPend: sum(pending.filter((x) => x.type === 'ingreso')),
+          outPend: sum(pending.filter((x) => x.type === 'gasto')),
           pending,
         };
       });
@@ -64,13 +92,13 @@ export default function Historial() {
         .sort((a, b) => (a.resolved_at! < b.resolved_at! ? 1 : -1))
         .slice(0, 10)
         .map((r) => ({ ...r, fixed: byId.get(r.fixed_id)! }));
-      return { months, resolved };
+      return { months, resolved, unconfirmed };
     },
     [currentPeriod.year, currentPeriod.month, settings.monthStart, settings.holiday],
   );
 
   if (!data) return <View style={layout.screen} />;
-  const { months, resolved } = data;
+  const { months, resolved, unconfirmed: pendingItems } = data;
 
   const max = Math.max(
     1,
@@ -78,13 +106,31 @@ export default function Historial() {
   );
   const scale = (v: number) => (v > 0 ? Math.max(4, Math.round((v / max) * BAR_H)) : 0);
   const avg = Math.round(months.reduce((s, m) => s + m.inc + m.inExtra - m.out - m.outExtra, 0) / months.length / 1000) * 1000;
-  const pendingItems = months.flatMap((m) => m.pending);
   const count = pendingItems.length;
   const monthOf = (iso: string) => monthName(periodOf(iso, settings.monthStart).month);
+  /** Mes al que pertenece; con el año si no es el actual. */
+  const monthYearOf = (iso: string) => {
+    const p = periodOf(iso, settings.monthStart);
+    const name = monthName(p.month).toLowerCase();
+    return p.year === currentPeriod.year ? name : `${name} ${p.year}`;
+  };
 
   const act = async (fn: () => Promise<unknown>) => {
     await fn();
     bump();
+  };
+
+  const discard = (p: Unconfirmed) =>
+    act(() => (p.item ? skipOccurrence(db, p.item.fixed.id, p.item.occ.due) : deleteMovement(db, p.mov.id)));
+
+  // Confirmar un gasto también necesita dinero en el fondo total.
+  const confirm = async (p: Unconfirmed) => {
+    if (p.type === 'gasto' && !(await canPay(db, p.amount))) return;
+    await act(() =>
+      p.item
+        ? markPaid(db, p.item.fixed, p.item.occ.due, { extra: true, amount: p.amount, date: p.item.occ.date })
+        : confirmMovement(db, p.mov.id),
+    );
   };
 
   return (
@@ -229,9 +275,9 @@ export default function Historial() {
         )}
 
         {pendingItems.map((p) => {
-          const income = p.fixed.type === 'ingreso';
+          const income = p.type === 'ingreso';
           return (
-            <View key={`${p.fixed.id}-${p.occ.due}`} style={st.pendCard}>
+            <View key={p.key} style={st.pendCard}>
               <Row gap={12}>
                 <View style={[st.pendIcon, income ? st.pendIconIn : st.pendIconOut]}>
                   {income ? <IconArrowUp color={C.in} /> : <IconArrowDown color={C.danger} />}
@@ -243,7 +289,8 @@ export default function Historial() {
                   <T w={600} size={12.5} color={C.muted}>
                     {joinMeta(
                       income ? t('common.income') : t('common.expense'),
-                      t('history.sheet.periodOf', { month: monthOf(p.occ.due).toLowerCase() }),
+                      p.mov && t('history.sheet.occasional'),
+                      t('history.sheet.periodOf', { month: monthYearOf(p.date) }),
                     )}
                   </T>
                 </Stack>
@@ -255,7 +302,7 @@ export default function Historial() {
                 <Tap
                   style={[st.pendAction, st.pendDelete]}
                   accessibilityLabel={t('history.sheet.deleteLabel', { name: p.name })}
-                  onPress={() => act(() => skipOccurrence(db, p.fixed.id, p.occ.due))}>
+                  onPress={() => discard(p)}>
                   <IconTrash size={16} color={C.danger} stroke={2} />
                   <T w={800} size={14} color={C.danger}>
                     {t('history.sheet.delete')}
@@ -264,7 +311,7 @@ export default function Historial() {
                 <Tap
                   style={[st.pendAction, st.pendConfirm]}
                   accessibilityLabel={t('history.sheet.confirmLabel', { name: p.name })}
-                  onPress={() => act(() => markPaid(db, p.fixed, p.occ.due, { extra: true, amount: p.amount, date: p.occ.date }))}>
+                  onPress={() => confirm(p)}>
                   <IconCheck size={16} color={C.white} stroke={2.4} />
                   <T w={800} size={14} color={C.white}>
                     {t('history.sheet.confirm')}

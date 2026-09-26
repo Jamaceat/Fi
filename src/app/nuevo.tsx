@@ -25,6 +25,7 @@ import {
 } from '@/components/ui';
 import { C } from '@/constants/theme';
 import { deleteMovement, getMovement, insertFixed, insertMovement, updateMovement, type Movement } from '@/db/repo';
+import { alertNoFund, fundBalance } from '@/lib/fund';
 import { t, tList } from '@/i18n';
 import { fromISO, longDate, periodOf, periodRange, todayISO, weekdayOf } from '@/lib/dates';
 import { cleanAmount, dots } from '@/lib/format';
@@ -153,6 +154,22 @@ export default function Nuevo() {
     setSaving(true);
     const name = note.trim() || cat;
     try {
+      // Un gasto pagado sale del fondo total: si no alcanza, el ocasional se guarda como pendiente.
+      let willPay = !isFixed && (linked || paid);
+      if (willPay && g) {
+        // Al editar, lo que ya estaba pagado vuelve al fondo antes de comparar.
+        const back = editing?.paid ? (editing.type === 'gasto' ? editing.amount : -editing.amount) : 0;
+        const fund = (await fundBalance(db)) + back;
+        if (n > fund) {
+          // El pago de un fijo no puede quedar pendiente: no se guarda.
+          if (linked) {
+            alertNoFund(n, fund);
+            return;
+          }
+          alertNoFund(n, fund, true);
+          willPay = false;
+        }
+      }
       if (editing) {
         await updateMovement(db, editing.id, {
           type: tipo,
@@ -161,10 +178,10 @@ export default function Nuevo() {
           amount: n,
           date,
           note: note.trim(),
-          paid: linked || paid ? 1 : 0,
+          paid: willPay ? 1 : 0,
         });
       } else if (freq === 'ocasional') {
-        await insertMovement(db, { type: tipo, name, category: cat, amount: n, date, note: note.trim(), paid: paid ? 1 : 0 });
+        await insertMovement(db, { type: tipo, name, category: cat, amount: n, date, note: note.trim(), paid: willPay ? 1 : 0 });
       } else {
         // Fijo: solo crea la regla. Anticipado no es pagado: la primera ocurrencia
         // queda pendiente en Fijos hasta que se marque.

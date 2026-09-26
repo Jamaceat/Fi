@@ -27,6 +27,7 @@ import {
   IconExpense,
   IconGear,
   IconIncome,
+  IconPending,
   IconPiggy,
   IconRefresh,
   IconTarget,
@@ -50,14 +51,23 @@ import {
   ValueMotionProvider,
 } from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, listSavings, loadFixedData, totalFund, type HomeBlock, type Movement } from '@/db/repo';
+import {
+  listMovements,
+  listSavings,
+  listUnpaidBefore,
+  loadFixedData,
+  totalFund,
+  type HomeBlock,
+  type Movement,
+} from '@/db/repo';
 import { t } from '@/i18n';
 import { loadDays } from '@/lib/calendar';
-import { periodName, periodRange, samePeriod, shiftPeriod, shortDate, type Period } from '@/lib/dates';
+import { periodName, periodOf, periodRange, samePeriod, shiftPeriod, shortDate, todayISO, type Period } from '@/lib/dates';
 import { fixedItems, sum } from '@/lib/finance';
 import type { HolidayMap } from '@/lib/holidays';
 import type { HolidayRule } from '@/lib/schedule';
 import { fmt, fmtBalance, fmtFlow, joinMeta, MASKED_AMOUNT, signed } from '@/lib/format';
+import { unconfirmedOf } from '@/lib/unconfirmed';
 import { useApp, useLoad } from '@/state/app';
 import { common, layout } from '@/styles/common';
 import { styles as st } from '@/styles/screens/inicio.styles';
@@ -88,6 +98,9 @@ const SHORTCUTS = [
   { key: 'months', Icon: IconBars, color: C.out, bg: C.outSoft, go: () => router.navigate('/historial') },
 ] as const;
 
+/** Segunda fila: abre Meses con la lista de sin confirmar abierta. */
+const openUnconfirmed = () => router.navigate({ pathname: '/historial', params: { pending: '1' } });
+
 /** "Fijo", "Ocasional" o "Pendiente". */
 const movementKind = (m: Movement) =>
   m.fixed_id != null ? t('common.fixed') : m.paid ? t('common.occasional') : t('common.pending');
@@ -99,6 +112,8 @@ type HomeData = {
   fund: Awaited<ReturnType<typeof totalFund>>;
   /** Días de la tarjeta del calendario. */
   days: Awaited<ReturnType<typeof loadDays>>;
+  /** Cuántos fijos y ocasionales de meses cerrados siguen sin confirmar. */
+  unconfirmed: number;
   /** Mes al que pertenecen los datos. */
   period: Period;
   from: string;
@@ -114,15 +129,19 @@ async function loadHome(
 ): Promise<HomeData> {
   const { from, to } = periodRange(period, monthStart);
   const cells = cellsRange(period.year, period.month);
-  const [movs, fixedData, savings, fund, days] = await Promise.all([
+  // Sin confirmar = lo de antes del mes de hoy (no del que se está viendo).
+  const before = periodRange(periodOf(todayISO(), monthStart), monthStart).from;
+  const [movs, fixedData, savings, fund, days, unpaid] = await Promise.all([
     listMovements(db, from, to),
     loadFixedData(db),
     listSavings(db),
     totalFund(db),
     loadDays(db, cells.from, cells.to, rule, holidays),
+    listUnpaidBefore(db, before),
   ]);
   const items = fixedItems(fixedData, from, to, rule, holidays);
-  return { movs, items, savings, fund, days, period, from, to };
+  const unconfirmed = unconfirmedOf(fixedData, unpaid, before, rule, holidays).length;
+  return { movs, items, savings, fund, days, unconfirmed, period, from, to };
 }
 
 /** Una carta del mazo: el contenido de Inicio para un mes. */
@@ -324,7 +343,8 @@ function MonthDeck({ data, revealed, onReveal }: { data: HomeData; revealed: boo
   const fixedIn = items.filter((i) => i.fixed.type === 'ingreso');
 
   const pendingIncome = fixedIn.find((i) => !i.paid);
-  const balance = savings[0]?.after ?? 0;
+  // Ahorro total = libre + lo bloqueado en metas.
+  const balance = (savings[0]?.after ?? 0) + fund.goals;
   const monthSaved = savings.filter((e) => e.date >= data.from && e.date < data.to).reduce((s, e) => s + e.delta, 0);
 
   const hide = settings.hideAmounts && !revealed;
@@ -402,19 +422,47 @@ function MonthDeck({ data, revealed, onReveal }: { data: HomeData; revealed: boo
 
     shortcuts: (
       <Card style={st.shortcuts}>
-        {SHORTCUTS.map(({ key, Icon, color, bg, go }) => {
-          const name = t(`home.shortcuts.${key}`);
-          return (
-            <Tap key={key} onPress={go} style={st.shortcut} accessibilityLabel={t('home.shortcuts.open', { name })}>
-              <View style={[common.iconTile, st.shortcutIcon, { backgroundColor: bg }]}>
-                <Icon size={22} color={color} />
-              </View>
-              <T w={700} size={12.5} numberOfLines={1}>
-                {name}
-              </T>
-            </Tap>
-          );
-        })}
+        <Row style={st.shortcutRow}>
+          {SHORTCUTS.map(({ key, Icon, color, bg, go }) => {
+            const name = t(`home.shortcuts.${key}`);
+            return (
+              <Tap key={key} onPress={go} style={st.shortcut} accessibilityLabel={t('home.shortcuts.open', { name })}>
+                <View style={[common.iconTile, st.shortcutIcon, { backgroundColor: bg }]}>
+                  <Icon size={22} color={color} />
+                </View>
+                <T w={700} size={12.5} numberOfLines={1}>
+                  {name}
+                </T>
+              </Tap>
+            );
+          })}
+        </Row>
+        {/* Misma cuadrícula de 4 columnas: los huecos mantienen el ancho de cada acceso. */}
+        <Row style={st.shortcutRow}>
+          <Tap
+            onPress={openUnconfirmed}
+            style={st.shortcut}
+            accessibilityLabel={
+              data.unconfirmed ? t('history.pendingLabel', { count: data.unconfirmed }) : t('history.pendingNone')
+            }>
+            <View style={[common.iconTile, st.shortcutIcon, st.unconfirmedIcon]}>
+              <IconPending size={22} color={C.warn} />
+              {data.unconfirmed > 0 && (
+                <View style={st.badge}>
+                  <T w={800} size={11} color={C.white}>
+                    {data.unconfirmed}
+                  </T>
+                </View>
+              )}
+            </View>
+            <T w={700} size={12.5} numberOfLines={1}>
+              {t('home.shortcuts.unconfirmed')}
+            </T>
+          </Tap>
+          <View style={st.shortcut} />
+          <View style={st.shortcut} />
+          <View style={st.shortcut} />
+        </Row>
       </Card>
     ),
 

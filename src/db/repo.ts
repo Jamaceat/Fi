@@ -57,7 +57,18 @@ export type FixedStatus = {
   resolved_at: string | null;
 };
 
-export type SavingsEntry = { id: number; kind: 'add' | 'update'; date: string; delta: number; after: number };
+/**
+ * Registro del ahorro. `after` = saldo libre (sin lo bloqueado en metas) después del registro.
+ * add: sale del fondo · withdraw: vuelve al fondo · update: intereses/bajas · goal: aporte a la meta `goal_id`.
+ */
+export type SavingsEntry = {
+  id: number;
+  kind: 'add' | 'update' | 'withdraw' | 'goal';
+  date: string;
+  delta: number;
+  after: number;
+  goal_id: number | null;
+};
 export type Goal = { id: number; name: string; target: number; saved: number; last_date: string | null };
 
 export type DefaultPeriod = { preset: Preset; n: number; unit: Unit };
@@ -159,19 +170,33 @@ export const listMovements = (db: SQLiteDatabase, from: string, to: string) =>
   );
 
 /**
- * Fondo total: lo que queda de todos los meses juntos (ingresos − gastos pagados/recibidos).
+ * Fondo total: lo que queda de todos los meses juntos (ingresos − gastos pagados/recibidos),
+ * menos lo que se pasó al ahorro ("Agregar dinero" − "Retirar") y lo apartado en metas.
+ * Las actualizaciones de saldo del ahorro (intereses, bajas) no mueven el fondo.
+ * Al borrar una meta, lo apartado en ella vuelve al fondo.
+ * `goals` = lo bloqueado en metas; también forma parte del ahorro total.
  * `months` = cuántos meses distintos tienen movimientos.
  */
 export async function totalFund(db: SQLiteDatabase) {
-  const row = await db.getFirstAsync<{ income: number | null; expense: number | null; months: number }>(
+  const row = await db.getFirstAsync<{
+    income: number | null;
+    expense: number | null;
+    saved: number | null;
+    goals: number | null;
+    months: number;
+  }>(
     `SELECT SUM(CASE WHEN type = 'ingreso' THEN amount ELSE 0 END) AS income,
             SUM(CASE WHEN type = 'gasto' THEN amount ELSE 0 END) AS expense,
+            (SELECT SUM(delta) FROM savings_entries WHERE kind IN ('add', 'withdraw')) AS saved,
+            (SELECT SUM(saved) FROM goals) AS goals,
             COUNT(DISTINCT substr(date, 1, 7)) AS months
      FROM movements WHERE paid = 1`,
   );
   const income = row?.income ?? 0;
   const expense = row?.expense ?? 0;
-  return { income, expense, balance: income - expense, months: row?.months ?? 0 };
+  const saved = row?.saved ?? 0;
+  const goals = row?.goals ?? 0;
+  return { income, expense, saved, goals, balance: income - expense - saved - goals, months: row?.months ?? 0 };
 }
 
 export const getMovement = (db: SQLiteDatabase, id: number) =>
@@ -208,6 +233,14 @@ export async function updateMovement(
 /** Marca o desmarca un ocasional como pagado/recibido. */
 export const setMovementPaid = (db: SQLiteDatabase, id: number, paid: boolean) =>
   db.runAsync('UPDATE movements SET paid = ? WHERE id = ?', paid ? 1 : 0, id);
+
+/** Ocasionales pendientes con fecha anterior a `before` (meses ya cerrados). */
+export const listUnpaidBefore = (db: SQLiteDatabase, before: string) =>
+  db.getAllAsync<Movement>('SELECT * FROM movements WHERE paid = 0 AND date < ? ORDER BY date, id', before);
+
+/** Confirma un ocasional pendiente de un mes cerrado: queda pagado/recibido en periodo extraordinario. */
+export const confirmMovement = (db: SQLiteDatabase, id: number) =>
+  db.runAsync('UPDATE movements SET paid = 1, extraordinary = 1 WHERE id = ?', id);
 
 export async function deleteMovement(db: SQLiteDatabase, id: number) {
   await db.withTransactionAsync(async () => {
@@ -408,21 +441,35 @@ export const skipOccurrence = (db: SQLiteDatabase, fixedId: number, due: string)
 export const listSavings = (db: SQLiteDatabase) =>
   db.getAllAsync<SavingsEntry>('SELECT * FROM savings_entries ORDER BY date DESC, id DESC');
 
-export const insertSavings = (db: SQLiteDatabase, e: Omit<SavingsEntry, 'id'>) =>
+export const insertSavings = (db: SQLiteDatabase, e: Omit<SavingsEntry, 'id' | 'goal_id'> & { goal_id?: number | null }) =>
   db.runAsync(
-    'INSERT INTO savings_entries (kind, date, delta, after) VALUES (?, ?, ?, ?)',
-    e.kind, e.date, e.delta, e.after,
+    'INSERT INTO savings_entries (kind, date, delta, after, goal_id) VALUES (?, ?, ?, ?, ?)',
+    e.kind, e.date, e.delta, e.after, e.goal_id ?? null,
   );
 
 export const listGoals = (db: SQLiteDatabase) => db.getAllAsync<Goal>('SELECT * FROM goals ORDER BY id');
 
-export const insertGoal = (db: SQLiteDatabase, name: string, target: number) =>
-  db.runAsync('INSERT INTO goals (name, target) VALUES (?, ?)', name, target);
+export async function insertGoal(db: SQLiteDatabase, name: string, target: number) {
+  const r = await db.runAsync('INSERT INTO goals (name, target) VALUES (?, ?)', name, target);
+  return r.lastInsertRowId;
+}
 
-export const contributeGoal = (db: SQLiteDatabase, id: number, amount: number) =>
-  db.runAsync('UPDATE goals SET saved = saved + ?, last_date = ? WHERE id = ?', amount, todayISO(), id);
+/** Aporta a una meta y lo deja en el historial del ahorro. `free` = saldo libre actual (no cambia). */
+export async function contributeGoal(db: SQLiteDatabase, id: number, amount: number, free: number) {
+  const today = todayISO();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE goals SET saved = saved + ?, last_date = ? WHERE id = ?', amount, today, id);
+    await insertSavings(db, { kind: 'goal', date: today, delta: amount, after: free, goal_id: id });
+  });
+}
 
-export const deleteGoal = (db: SQLiteDatabase, id: number) => db.runAsync('DELETE FROM goals WHERE id = ?', id);
+/** Borra la meta y sus aportes; lo apartado en ella vuelve al fondo total. */
+export async function deleteGoal(db: SQLiteDatabase, id: number) {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM savings_entries WHERE goal_id = ?', id);
+    await db.runAsync('DELETE FROM goals WHERE id = ?', id);
+  });
+}
 
 // ——— Datos ———
 
