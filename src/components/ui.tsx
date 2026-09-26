@@ -566,7 +566,7 @@ export function MovementRow({
   badge?: string;
   first?: boolean;
   onPress?: () => void;
-  /** Ocasional: casilla pagado/pendiente en lugar de la inicial. */
+  /** Casilla pagado/pendiente en lugar de la inicial. */
   check?: { on: boolean; onToggle: () => void };
 }) {
   return (

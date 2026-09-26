@@ -47,7 +47,6 @@ export type FixedDraft = {
   customUnit: Unit;
   anticipated: boolean;
   variable: boolean;
-  autoMove: boolean;
   remind: boolean;
   remindDays: number;
 };
@@ -73,7 +72,6 @@ export function newFixedDraft(kind: Kind, settings: Settings, date = todayISO())
     customUnit: def.unit,
     anticipated: true,
     variable: false,
-    autoMove: true,
     remind: true,
     remindDays: 2,
   };
@@ -94,7 +92,6 @@ export function draftFromFixed(f: Fixed): FixedDraft {
     customUnit: f.custom_unit,
     anticipated: !!f.anticipated,
     variable: !!f.variable,
-    autoMove: !!f.auto_move,
     remind: !!f.remind,
     remindDays: f.remind_days,
   };
@@ -141,7 +138,6 @@ export const draftValues = (d: FixedDraft, name = d.name.trim()) => ({
   custom_unit: d.customUnit,
   anticipated: d.anticipated ? 1 : 0,
   variable: d.variable ? 1 : 0,
-  auto_move: d.autoMove ? 1 : 0,
   remind: d.remind ? 1 : 0,
   remind_days: d.remindDays,
 });
@@ -585,14 +581,6 @@ export function FixedForm({
               on={d.anticipated}
               disabled={lockAnticipated}
               onPress={() => set({ anticipated: !d.anticipated })}
-            />
-            <SwitchRow
-              accent={accent}
-              label={t(`fixedForm.options.autoMove.${kind}`)}
-              desc={t('fixedForm.options.autoMoveDesc')}
-              help={t(`fixedForm.help.autoMove.${kind}`)}
-              on={d.autoMove}
-              onPress={() => set({ autoMove: !d.autoMove })}
             />
             <SwitchRow
               accent={accent}

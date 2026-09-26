@@ -229,6 +229,18 @@ export const es = {
   fixed: {
     title: 'Fijos',
     ofTotal: 'de {{amount}}',
+    editLabel: 'Editar {{name}}',
+    summary: {
+      perMonth: {
+        gastos: 'Tus gastos fijos suman al mes',
+        ingresos: 'Tus ingresos fijos suman al mes',
+      },
+      hint: 'Cada fijo crea su movimiento en cada fecha. Márcalo en Movimientos cuando pase.',
+    },
+    next: {
+      gasto: 'Próximo pago: {{date}}',
+      ingreso: 'Próximo ingreso: {{date}}',
+    },
     markPaid: 'Marcar como pagado',
     markReceived: 'Marcar como recibido',
     search: {
@@ -256,29 +268,17 @@ export const es = {
         ingresos: 'Sin ingresos que coincidan',
       },
       none: {
-        gastos: 'Sin gastos fijos este mes',
-        ingresos: 'Sin ingresos fijos este mes',
+        gastos: 'Aún no tienes gastos fijos',
+        ingresos: 'Aún no tienes ingresos fijos',
       },
       searchHint: 'Prueba con otra palabra o revisa la otra pestaña',
       addHint: 'Toca Agregar para crear uno',
     },
     expenses: {
       title: 'Gastos fijos',
-      paidThisMonth: 'Pagado este mes',
-      paidCount: '{{done}} de {{total}} pagos',
-      pending: 'Pendiente {{amount}}',
-      paidOn: 'Pagado · {{date}}',
-      dueOn: 'Vence el {{date}}',
     },
     incomes: {
       title: 'Ingresos fijos',
-      receivedThisMonth: 'Recibido este mes',
-      receivedCount: '{{done}} de {{total}} recibidos',
-      receivedOn: 'Recibido el {{date}}',
-      expectedOn: 'Pendiente · esperado el {{date}}',
-      changeAmount: 'Cambiar monto de {{name}} solo esta fecha',
-      editLabel: 'Editar {{name}}',
-      frequency: 'Periodicidad',
     },
     confirm: {
       title: 'Confirmar {{name}}',
@@ -416,11 +416,6 @@ export const es = {
         ingreso:
           '• Anticipado: te pagan al comenzar el periodo. El primer ingreso llega en este periodo.\n• Vencido (apagado): te pagan cuando el periodo termina, como un salario mes vencido. El primer ingreso llega el periodo siguiente.',
       },
-      autoMove: {
-        gasto: 'Registrar al marcar pagado',
-        ingreso: 'Registrar al marcar recibido',
-      },
-      autoMoveDesc: 'Crea el movimiento automáticamente en tu lista del mes.',
       remind: 'Recordatorio',
       remindDesc: {
         gasto: 'Te avisamos antes de que venza.',
@@ -463,15 +458,9 @@ export const es = {
         'Cambiaste el monto o las fechas. Elige si el cambio cuenta solo de aquí en adelante o si también corrige los pagos que ya están registrados.',
       variable: {
         gasto:
-          'Actívalo si el valor no es igual cada vez, como el agua o la luz. Mientras tanto se usa el monto aproximado y, al marcarlo como pagado, te pediremos el valor real.',
+          'Actívalo si el valor no es igual cada vez, como el agua o la luz. Cada movimiento se crea con el monto aproximado y, al marcarlo como pagado en Movimientos, te pediremos el valor real.',
         ingreso:
-          'Actívalo si el valor no es igual cada vez, como comisiones u horas extra. Mientras tanto se usa el monto aproximado y, al marcarlo como recibido, te pediremos el valor real.',
-      },
-      autoMove: {
-        gasto:
-          'Encendido: al marcar el pago en Fijos se agrega solo a tus movimientos del mes. Apagado: solo queda marcado como pagado en Fijos.',
-        ingreso:
-          'Encendido: al marcar el ingreso en Fijos se agrega solo a tus movimientos del mes. Apagado: solo queda marcado como recibido en Fijos.',
+          'Actívalo si el valor no es igual cada vez, como comisiones u horas extra. Cada movimiento se crea con el monto aproximado y, al marcarlo como recibido en Movimientos, te pediremos el valor real.',
       },
       remind: {
         gasto: 'Te avisa antes de la fecha de pago para que no se te pase. Debajo eliges con cuántos días de anticipación.',
@@ -745,7 +734,7 @@ export const es = {
       type: 'Gasto: dinero que sale, como compras o pagos. Ingreso: dinero que entra, como tu salario o una venta. Según el tipo cambian las categorías.',
       amount: 'Escribe el valor en pesos, solo números. Los puntos de miles se ponen solos.',
       frequency:
-        'Ocasional: pasa una sola vez, como una compra. Fijo: se repite cada cierto tiempo, como el arriendo o el salario; la app lo agenda en Fijos y puede avisarte antes de cada fecha.',
+        'Ocasional: pasa una sola vez, como una compra. Fijo: se repite cada cierto tiempo, como el arriendo o el salario; la app lo guarda en Fijos y en cada fecha crea el movimiento pendiente para que lo marques en Movimientos.',
       category: {
         gasto: 'Agrupa el gasto para ver en qué se va tu dinero en los resúmenes. Toca una opción para elegirla.',
         ingreso: 'Agrupa el ingreso para ver de dónde viene tu dinero en los resúmenes. Toca una opción para elegirla.',

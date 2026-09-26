@@ -27,7 +27,6 @@ export type Fixed = Schedule & {
   category: string;
   amount: number;
   variable: number;
-  auto_move: number;
   remind: number;
   remind_days: number;
   active: number;
@@ -224,7 +223,7 @@ export const getFixed = (db: SQLiteDatabase, id: number) =>
 
 const FIXED_COLS = [
   'type', 'name', 'category', 'amount', 'preset', 'day', 'day1', 'day2', 'weekday', 'custom_n',
-  'custom_unit', 'anticipated', 'variable', 'auto_move', 'remind', 'remind_days', 'start_date',
+  'custom_unit', 'anticipated', 'variable', 'remind', 'remind_days', 'start_date',
 ] as const;
 
 export async function insertFixed(db: SQLiteDatabase, f: FixedInput) {
@@ -350,32 +349,28 @@ export async function loadFixedData(db: SQLiteDatabase) {
 }
 
 /**
- * Marca una ocurrencia como pagada/recibida. Si el fijo tiene "Registrar al marcar",
- * crea el movimiento correspondiente. `extra` = confirmado en periodo extraordinario.
+ * Marca una ocurrencia como pagada/recibida y crea su movimiento. `extra` = confirmado en periodo extraordinario.
  * `amount` y `date` deben venir de la ocurrencia (tramo y ajuste incluidos); por defecto, los del fijo.
  */
 export async function markPaid(
   db: SQLiteDatabase,
   f: Fixed,
   due: string,
-  opts: { amount?: number; date?: string; extra?: boolean; forceMovement?: boolean } = {},
+  opts: { amount?: number; date?: string; extra?: boolean } = {},
 ) {
   const amount = opts.amount ?? f.amount;
   await db.withTransactionAsync(async () => {
-    let movementId: number | null = null;
-    if (f.auto_move || opts.extra || opts.forceMovement) {
-      movementId = await insertMovement(db, {
-        type: f.type,
-        name: f.name,
-        category: f.category,
-        amount,
-        date: opts.date ?? due,
-        note: '',
-        fixed_id: f.id,
-        fixed_due: due,
-        extraordinary: opts.extra ? 1 : 0,
-      });
-    }
+    const movementId = await insertMovement(db, {
+      type: f.type,
+      name: f.name,
+      category: f.category,
+      amount,
+      date: opts.date ?? due,
+      note: '',
+      fixed_id: f.id,
+      fixed_due: due,
+      extraordinary: opts.extra ? 1 : 0,
+    });
     await db.runAsync(
       `INSERT OR REPLACE INTO fixed_status (fixed_id, due_date, status, amount, movement_id, resolved_at)
        VALUES (?, ?, 'paid', ?, ?, ?)`,

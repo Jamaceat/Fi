@@ -1,7 +1,28 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DB_NAME = 'finanzas.db';
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 7;
+
+/**
+ * Crea el movimiento de los fijos pagados/recibidos que no lo tienen (antes se podía apagar
+ * "Registrar al marcar"). Corre al migrar y al restaurar un respaldo anterior.
+ */
+export const FILL_FIXED_MOVEMENTS = `
+INSERT INTO movements (type, name, category, amount, date, note, fixed_id, fixed_due, extraordinary, paid)
+SELECT f.type, f.name, f.category, s.amount, COALESCE(o.date, s.due_date), '', f.id, s.due_date,
+       CASE WHEN s.resolved_at IS NULL THEN 0 ELSE 1 END, 1
+FROM fixed_status s
+JOIN fixed f ON f.id = s.fixed_id
+LEFT JOIN fixed_overrides o ON o.fixed_id = s.fixed_id AND o.due_date = s.due_date
+WHERE s.status = 'paid' AND s.movement_id IS NULL;
+
+UPDATE fixed_status SET movement_id = (
+  SELECT m.id FROM movements m
+  WHERE m.fixed_id = fixed_status.fixed_id AND m.fixed_due = fixed_status.due_date
+  ORDER BY m.id DESC LIMIT 1
+)
+WHERE status = 'paid' AND movement_id IS NULL;
+`;
 
 /** Se ejecuta en SQLiteProvider.onInit antes de renderizar la app. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -172,6 +193,12 @@ ALTER TABLE fixed ADD COLUMN anticipated INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE movements ADD COLUMN paid INTEGER NOT NULL DEFAULT 1;
 `);
     version = 6;
+  }
+
+  if (version === 6) {
+    // auto_move queda sin uso: un fijo pagado/recibido siempre tiene su movimiento.
+    await db.execAsync(FILL_FIXED_MOVEMENTS);
+    version = 7;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -206,7 +206,7 @@ export default function Inicio() {
 
     pending: pendingIncome && (
       <Tap
-        onPress={() => router.navigate({ pathname: '/fijos', params: { tab: 'ingresos' } })}
+        onPress={() => router.navigate({ pathname: '/movimientos', params: { tab: 'ingreso', filter: 'fijo' } })}
         style={st.pending}
         accessibilityLabel={t('home.pending.label', { name: pendingIncome.name })}>
         <View style={[common.iconTile, st.pendingIcon]}>
@@ -235,7 +235,7 @@ export default function Inicio() {
 
     breakdown: (
       <Card style={st.breakdown}>
-        <SectionTitle right={<LinkText onPress={() => router.navigate('/fijos')}>{t('home.breakdown.seeFixed')}</LinkText>}>
+        <SectionTitle right={<LinkText onPress={() => router.navigate({ pathname: '/movimientos', params: { filter: 'fijo' } })}>{t('home.breakdown.seeFixed')}</LinkText>}>
           {t('common.expenses')}
         </SectionTitle>
         <Breakdown

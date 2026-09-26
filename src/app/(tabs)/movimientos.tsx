@@ -1,17 +1,43 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 
+import { DatePicker } from '@/components/calendar';
 import { IconCalendar, IconWrench } from '@/components/icons';
-import { Card, Chip, EmptyBox, MovementRow, Row, Screen, Segmented, Stack, T, Tap, Title } from '@/components/ui';
+import {
+  AmountField,
+  Card,
+  Chip,
+  EmptyBox,
+  LinkText,
+  MovementRow,
+  PrimaryButton,
+  Row,
+  Screen,
+  Segmented,
+  Sheet,
+  Stack,
+  T,
+  Tap,
+  Title,
+} from '@/components/ui';
 import { C } from '@/constants/theme';
-import { listMovements, setMovementPaid, type Movement } from '@/db/repo';
+import {
+  clearOverride,
+  listMovements,
+  loadFixedData,
+  markPaid,
+  saveOverride,
+  setMovementPaid,
+  unmark,
+  type Movement,
+} from '@/db/repo';
 import { t } from '@/i18n';
-import { periodLabel, shortDate } from '@/lib/dates';
-import { sum } from '@/lib/finance';
-import { fmt, fmtFlow, joinMeta } from '@/lib/format';
+import { longDate, periodLabel, shortDate } from '@/lib/dates';
+import { fixedItems, sum, type FixedItem } from '@/lib/finance';
+import { APPROX, cleanAmount, dots, fmt, fmtFlow, joinMeta } from '@/lib/format';
 import { movementBadge } from '@/lib/labels';
 import type { Kind } from '@/lib/schedule';
 import { useApp, useLoad } from '@/state/app';
@@ -22,22 +48,110 @@ type Filter = 'todos' | 'fijo' | 'ocasional';
 
 const FILTERS: Filter[] = ['todos', 'fijo', 'ocasional'];
 
+/** Un movimiento registrado o la ocurrencia de un fijo que aún no se marca. */
+type Entry = { mov: Movement; item?: never } | { item: FixedItem; mov?: never };
+
+const entryDate = (e: Entry) => (e.mov ? e.mov.date : e.item.occ.date);
+const isFixedEntry = (e: Entry) => !!e.item || e.mov?.fixed_id != null;
+
 export default function Movimientos() {
   const db = useSQLiteContext();
-  const { period, range, bump } = useApp();
+  const { period, range, settings, bump, holidays } = useApp();
+  const params = useLocalSearchParams<{ tab?: string; filter?: string }>();
   const [tab, setTab] = useState<Kind>('gasto');
   const [filter, setFilter] = useState<Filter>('todos');
+  const [lastParams, setLastParams] = useState('');
   // Movimiento fijo tocado: abre el selector calendario / editar.
   const [picked, setPicked] = useState<Movement | null>(null);
-  const movs = useLoad((db) => listMovements(db, range.from, range.to), [range.from, range.to]) ?? [];
+  const [confirming, setConfirming] = useState<{ item: FixedItem; input: string } | null>(null);
+  const [adjusting, setAdjusting] = useState<{ item: FixedItem; input: string; date: string } | null>(null);
+  const [dateOpen, setDateOpen] = useState(false);
+
+  // Inicio abre esta pestaña con ?tab=…&filter=…; se aplica una vez y se limpian los parámetros.
+  const paramsKey = `${params.tab ?? ''}|${params.filter ?? ''}`;
+  if (paramsKey !== lastParams) {
+    setLastParams(paramsKey);
+    if (params.tab === 'gasto' || params.tab === 'ingreso') setTab(params.tab);
+    if (FILTERS.includes(params.filter as Filter)) setFilter(params.filter as Filter);
+  }
+  useEffect(() => {
+    if (params.tab || params.filter) router.setParams({ tab: undefined, filter: undefined });
+  }, [params.tab, params.filter]);
+
+  const data = useLoad(
+    async (d) => {
+      const [movs, fixedData] = await Promise.all([listMovements(d, range.from, range.to), loadFixedData(d)]);
+      // Los fijos pagados ya están en `movs`; los pendientes se muestran para marcarlos aquí.
+      const pending = fixedItems(fixedData, range.from, range.to, settings.holiday, holidays).filter((i) => !i.paid);
+      return { movs, pending };
+    },
+    [range.from, range.to, settings.holiday],
+  );
+  const movs = data?.movs ?? [];
+  const pending = data?.pending ?? [];
 
   const g = tab === 'gasto';
   const accent = g ? C.out : C.in;
-  const list = movs.filter(
-    (m) =>
-      m.type === tab &&
-      (filter === 'todos' || (filter === 'fijo' ? m.fixed_id != null : m.fixed_id == null)),
-  );
+  const entries: Entry[] = [...movs.map((mov) => ({ mov })), ...pending.map((item) => ({ item }))];
+  const list = entries
+    .filter((e) => (e.mov ? e.mov.type : e.item.fixed.type) === tab)
+    .filter((e) => filter === 'todos' || (filter === 'fijo') === isFixedEntry(e))
+    .sort((a, b) => (entryDate(a) < entryDate(b) ? 1 : entryDate(a) > entryDate(b) ? -1 : 0));
+  const total = sum(list.map((e) => e.mov ?? e.item));
+
+  const toggleFixed = async (item: FixedItem) => {
+    if (item.fixed.variable) {
+      setConfirming({ item, input: String(item.amount) });
+      return;
+    }
+    await markPaid(db, item.fixed, item.occ.due, { amount: item.amount, date: item.occ.date });
+    bump();
+  };
+
+  const confirmVariable = async () => {
+    if (!confirming) return;
+    const amount = Number(confirming.input) || 0;
+    if (amount <= 0) return;
+    await markPaid(db, confirming.item.fixed, confirming.item.occ.due, { amount, date: confirming.item.occ.date });
+    setConfirming(null);
+    bump();
+  };
+
+  // Desmarcar un fijo borra su movimiento y la ocurrencia vuelve a quedar pendiente.
+  const toggleMovement = async (m: Movement) => {
+    if (m.fixed_id != null && m.fixed_due) await unmark(db, m.fixed_id, m.fixed_due);
+    else await setMovementPaid(db, m.id, !m.paid);
+    bump();
+  };
+
+  const openAdjust = (item: FixedItem) => {
+    setDateOpen(false);
+    setAdjusting({ item, input: String(item.amount), date: item.occ.date });
+  };
+
+  const saveAdjust = async () => {
+    if (!adjusting) return;
+    const amount = Number(adjusting.input) || 0;
+    if (amount <= 0) return;
+    const { item, date } = adjusting;
+    // Lo que coincide con lo que ya le toca no se guarda como ajuste.
+    await saveOverride(db, item.fixed.id, item.occ.due, {
+      amount: amount === item.base ? null : amount,
+      date: date === item.planned ? null : date,
+    });
+    setAdjusting(null);
+    bump();
+  };
+
+  const resetAdjust = async () => {
+    if (!adjusting) return;
+    await clearOverride(db, adjusting.item.fixed.id, adjusting.item.occ.due);
+    setAdjusting(null);
+    bump();
+  };
+
+  const confirmingIncome = confirming?.item.fixed.type === 'ingreso';
+  const adjustingIncome = adjusting?.item.fixed.type === 'ingreso';
 
   return (
     <Screen gap={16}>
@@ -64,7 +178,7 @@ export default function Movimientos() {
             {t(`movements.total.${filter}.${tab}`)}
           </T>
           <T serif w={600} size={26} color={accent} tabular numberOfLines={1} adjustsFontSizeToFit>
-            {fmt(sum(list))}
+            {fmt(total)}
           </T>
         </Stack>
         <T w={700} size={12.5} color={C.muted}>
@@ -76,32 +190,137 @@ export default function Movimientos() {
         <EmptyBox title={t(`movements.empty.${tab}`)} hint={t('movements.emptyHint')} />
       ) : (
         <Card style={common.listCard}>
-          {list.map((m, i) => (
-            <MovementRow
-              key={m.id}
-              first={i === 0}
-              name={m.name}
-              meta={joinMeta(m.category, shortDate(m.date), !!m.extraordinary && t('common.extraordinaryLower'))}
-              amount={fmtFlow(m.amount, !g)}
-              income={!g}
-              badge={movementBadge(m)}
-              check={
-                m.fixed_id == null
-                  ? { on: !!m.paid, onToggle: () => setMovementPaid(db, m.id, !m.paid).then(bump) }
-                  : undefined
-              }
-              onPress={() => (m.fixed_id != null ? setPicked(m) : editMovement(m))}
-            />
-          ))}
+          {list.map((e, i) =>
+            e.mov ? (
+              <MovementRow
+                key={e.mov.id}
+                first={i === 0}
+                name={e.mov.name}
+                meta={joinMeta(e.mov.category, shortDate(e.mov.date), !!e.mov.extraordinary && t('common.extraordinaryLower'))}
+                amount={fmtFlow(e.mov.amount, !g)}
+                income={!g}
+                badge={movementBadge(e.mov)}
+                check={{ on: !!e.mov.paid, onToggle: () => toggleMovement(e.mov) }}
+                onPress={() => (e.mov.fixed_id != null ? setPicked(e.mov) : editMovement(e.mov))}
+              />
+            ) : (
+              <MovementRow
+                key={`${e.item.fixed.id}-${e.item.occ.due}`}
+                first={i === 0}
+                name={e.item.name}
+                meta={joinMeta(e.item.fixed.category, shortDate(e.item.occ.date), adjustNote(e.item))}
+                amount={(e.item.fixed.variable ? APPROX : '') + fmtFlow(e.item.amount, !g)}
+                income={!g}
+                badge={t('common.fixed')}
+                check={{ on: false, onToggle: () => toggleFixed(e.item) }}
+                onPress={() => openAdjust(e.item)}
+              />
+            ),
+          )}
         </Card>
       )}
 
       <FixedActions movement={picked} onClose={() => setPicked(null)} />
+
+      <Sheet
+        visible={!!confirming}
+        onClose={() => setConfirming(null)}
+        title={confirming ? t('fixed.confirm.title', { name: confirming.item.name }) : ''}>
+        <T size={13} color={C.muted2}>
+          {t('fixed.confirm.text')}
+        </T>
+        <View style={common.amountBox}>
+          <AmountField
+            size={40}
+            autoFocus
+            value={dots(confirming?.input ?? '')}
+            onChangeText={(text) => confirming && setConfirming({ ...confirming, input: cleanAmount(text) })}
+          />
+        </View>
+        <PrimaryButton
+          label={confirmingIncome ? t('fixed.markReceived') : t('fixed.markPaid')}
+          bg={confirmingIncome ? C.in : C.ink}
+          disabled={!Number(confirming?.input)}
+          onPress={confirmVariable}
+        />
+      </Sheet>
+
+      <Sheet
+        visible={!!adjusting}
+        onClose={() => setAdjusting(null)}
+        title={adjusting ? t('fixed.adjust.title', { name: adjusting.item.name, date: shortDate(adjusting.item.planned) }) : ''}>
+        <T size={13} color={C.muted2}>
+          {t('fixed.adjust.text', { amount: fmt(adjusting?.item.base ?? 0) })}
+        </T>
+        <View style={common.amountBox}>
+          <AmountField
+            size={40}
+            value={dots(adjusting?.input ?? '')}
+            onChangeText={(text) => adjusting && setAdjusting({ ...adjusting, input: cleanAmount(text) })}
+          />
+        </View>
+        <Stack gap={6}>
+          <T w={800} size={14}>
+            {adjustingIncome ? t('fixed.adjust.dateIncome') : t('fixed.adjust.dateExpense')}
+          </T>
+          <Tap onPress={() => setDateOpen((o) => !o)} style={common.dateBtn} accessibilityLabel={t('fixed.adjust.changeDate')}>
+            <T w={600} size={14.5}>
+              {adjusting ? longDate(adjusting.date) : ''}
+            </T>
+            <IconCalendar color={C.muted} />
+          </Tap>
+          {adjusting && adjusting.date !== adjusting.item.planned && (
+            <T size={12.5} color={C.warn}>
+              {t('fixed.adjust.moved', { date: shortDate(adjusting.item.planned) })}
+            </T>
+          )}
+          {dateOpen && adjusting && (
+            <DatePicker
+              value={adjusting.date}
+              filter={adjusting.item.fixed.type}
+              onChange={(iso) => {
+                setAdjusting({ ...adjusting, date: iso });
+                setDateOpen(false);
+              }}
+            />
+          )}
+        </Stack>
+        <PrimaryButton
+          label={t('fixed.adjust.save')}
+          bg={adjustingIncome ? C.in : C.ink}
+          disabled={!Number(adjusting?.input)}
+          onPress={saveAdjust}
+        />
+        <Row style={layout.between}>
+          {adjusting && (adjusting.item.adjusted || adjusting.item.moved) ? (
+            <LinkText onPress={resetAdjust}>{t('fixed.adjust.reset')}</LinkText>
+          ) : (
+            <View />
+          )}
+          <LinkText
+            onPress={() => {
+              const item = adjusting?.item;
+              setAdjusting(null);
+              if (item) router.push({ pathname: '/fijo/[id]', params: { id: String(item.fixed.id) } });
+            }}>
+            {t('fixed.adjust.edit')}
+          </LinkText>
+        </Row>
+      </Sheet>
     </Screen>
   );
 }
 
 const editMovement = (m: Movement) => router.push({ pathname: '/nuevo', params: { id: String(m.id) } });
+
+const adjustNote = (item: FixedItem) =>
+  item.moved && item.adjusted
+    ? t('fixed.note.both')
+    : item.moved
+      ? t('fixed.note.moved', { date: shortDate(item.planned) })
+      : item.adjusted
+        ? t('fixed.note.adjusted')
+        : '';
 
 /** Dos opciones centradas para un movimiento fijo: ver sus pagos en el calendario o editarlo. */
 function FixedActions({ movement, onClose }: { movement: Movement | null; onClose: () => void }) {
